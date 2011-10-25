@@ -1,0 +1,136 @@
+alias cd..="cd .."
+alias ..="cd .."
+
+function up {
+    local tic=0
+    local path=""
+    local verbose=`false`
+    
+    case $1 in
+    -v)
+        shift 1;
+        verbose=true;
+        tic=$@
+         ;;
+    *)
+        tic=$@
+         ;;
+    esac
+    
+    while (( ${tic}  > 0 )) ; do
+        path="../${path}"
+        tic=$[ ${tic} - 1 ]
+    done
+    cd ${path}
+
+    echo -n "→ " ; pwd
+    if [ ${verbose} ] ; then
+        echo 
+        ls
+    fi
+}
+
+function down { 
+    local count=$1
+    if [ -z "${count}" ] ; then
+        cd ..
+        return 0;
+    fi
+
+    if ! [[ $OLDPWD =~ $PWD ]] ; then
+        return 1;
+    fi
+    
+    local max=`echo ${OLDPWD##${PWD}} | grep -o "/" | wc -l`
+    local prevdir=$PWD
+    local i=0
+    local path=($( echo ${OLDPWD##${PWD}} | grep -m 1 -o '\/[^\/]*' ))
+    local to=""
+
+    cd - 2>&1 > /dev/null
+    while (( ${i} < ${count} )) ; do
+        to="$to${path[${i}]}"
+        i=$[ ${i} + 1 ]
+        if (( ${i} >= ${max} )) ; then
+            break;
+        fi
+    done
+    cd - 2>&1 > /dev/null
+    cd ${to:1}
+    cd ${prevdir}
+    cd -
+}
+
+function pd {
+    cd - 2> /dev/null > /dev/null;
+
+    echo -n "→ " ; pwd
+    if [ "$1" == "-v" ] ; then
+        echo; 
+        ls
+    fi
+}
+
+alias ls="ls --color=auto -h --si"
+alias lsf="ls -s"
+alias lsr="ls -ltr"
+alias lsrf="ls -ltr"
+function lsd {
+    (cd $@ && find . -mindepth 1 -maxdepth 1 -type d -print0 | sed 's/.\///g' | xargs --null /bin/ls --color=auto -d)
+}
+
+alias find='find -O3'
+
+alias mkdir='mkdir -p -v'
+
+function rm {
+    if [ $1 == "-rf" ] ; then
+        echo "[WARN]: rm aliased to 'mv' to recycle. Did you mean 'rf'?"
+	return 1
+    fi
+    mv --verbose -f --backup=numbered --target-directory ~/.local/share/Trash/files/ $@
+}
+
+alias rf='/bin/rm -rf'
+
+function lp {
+    local ps=/bin/ps
+    
+    if [[ $# -lt 1 ]] ; then
+        echo "Usage: lp [-a] <foo>"
+    else
+        case $1 in
+        -a)
+            shift 1;
+            (${ps} aux | grep $@)
+            ;;
+        *)
+            (${ps} aux | sed -e 's/\S*\s*\([0-9]*\).*\:[0-9][0-9]\s*\(.*\)/\1 \2/' | grep $@)
+            ;;
+        esac
+    fi
+}
+
+function p {
+    local filename="/tmp/robbies_rubyp"
+    
+    touch ${filename}
+
+    if [ -w ${filename} ]; then
+        echo p \'$@\' > ${filename}
+        /usr/bin/env ruby ${filename}
+    else
+        echo "${filename} not writable"
+        return 1
+    fi
+}
+
+GREP_COLOR="1;33"
+alias grep='grep --color=auto'
+
+alias less='less -F -M --HILITE-UNREAD -x3 -R'
+
+alias history='history | less +G'
+alias env="env | grep --color=always -P '^.*?\='"
+
+export `grep -e ^[[:alnum:]]*_*[[:alnum:]]*= /home/rob/.bashrc | sed 's/=.*//g' |xargs`
