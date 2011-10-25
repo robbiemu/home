@@ -21,7 +21,7 @@ shopt -s checkwinsize
 # Space-triggered completion for '!'
 bind Space:magic-space
 
-HISTIGNORE="clear:reset:history:exit:pd:2u:3u:4u:5u:6u:7u:8u:..:cd..:cd ..:cd:ls:[bf]g"
+HISTIGNORE="clear:reset:history:exit:pd:up:down:..:cd..:cd ..:cd:ls:lsf:lsr:lsrf:lsd:[bf]g"
 HISTCONTROL=erasedups:ignoreboth
 HISTSIZE=2000
 shopt -s histappend
