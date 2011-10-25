@@ -133,4 +133,4 @@ alias less='less -F -M --HILITE-UNREAD -x3 -R'
 alias history='history | less +G'
 alias env="env | grep --color=always -P '^.*?\='"
 
-export `grep -e ^[[:alnum:]]*_*[[:alnum:]]*= /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`

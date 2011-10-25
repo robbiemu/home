@@ -67,4 +67,4 @@ function bash_prompt {
 }
 
 PROMPT_COMMAND=bash_prompt
-export `grep -e ^[[:alnum:]]*_*[[:alnum:]]*= /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`

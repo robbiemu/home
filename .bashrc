@@ -30,4 +30,4 @@ shopt -s histappend
 bind '"\e[A":history-search-backward'  
 bind '"\e[B":history-search-forward' 
 
-export `grep -e ^[[:alnum:]]*_*[[:alnum:]]*= /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`
