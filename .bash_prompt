@@ -10,9 +10,10 @@ function bash_prompt {
     local rm=""
     local code="${EMY}${history_number}${NONE}"
 
-    local BGR="\[\033[41m\]"
-    local EMY="\[\033[1;33m\]"
-    local EMW="\[\033[1;37m\]"
+    local  BGR="\[\033[41m\]"
+    local  EMY="\[\033[1;33m\]"
+    local  EMW="\[\033[1;37m\]"
+    local    Y="\[\033[0;33m\]"
     local NONE="\[\033[0m\]"
 
     if (( ${return_val} != 0 )) ; then
@@ -60,7 +61,7 @@ function bash_prompt {
     fi
 
     LAST_HISTORY=${history_number}
-    PS1="[${code}] ${EMW}\u${NONE}@\h:\W\$ "
+    PS1="[${code}]${EMW}\u${NONE}@\h:\W${Y}\$${NONE} "
     set ?=${return_val}
 }
 
