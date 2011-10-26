@@ -1,12 +1,19 @@
 # encoding: UTF-8
-requires=['wirble', 'ap', 'hirb', 'pp', 'bond']
+irbrc_header="[irbrc]"
+irbrc_error_header="\033[1;31m#{irbrc_header}\033[0m"
+irbrc_warn_header="\033[1;33m#{irbrc_header}\033[0m"
+irbrc_debug_header="\033[0;32m#{irbrc_header}\033[0m"
+
+requires=['wirble', 'ap', 'hirb', 'bond']
 requires.insert(0,'rubygems') unless defined? Gem
 
+loaded=[]
 requires.each do |lib|
     begin
     require lib
+    loaded.push lib
     rescue LoadError => e
-        puts "\033[1;31m[irbrc]\033[0m could not load gem '#{lib}', reason:\n\t#{e.message}\n\n"
+        puts "#{irbrc_error_header} could not load gem '#{lib}', reason:\n\t#{e.message}\n\n"
     end
 end
 
@@ -20,11 +27,14 @@ Hirb.enable
 # tab completion for filesystem
 begin
     Bond.start
-rescue LoadError
+rescue LoadError => e
+    puts "#{irbrc_error_header} could not load gem '#{lib}', reason:\n\t#{e.message}\n\n"
     unless IRB.conf[:LOAD_MODULES].include?('irb/completion')
         IRB.conf[:LOAD_MODULES] << 'irb/completion'
     end
 end
+
+puts "#{irbrc_header} gems para su holgura -  #{loaded}";
 
 IRB.conf[:AUTO_INDENT]=true
 
@@ -87,6 +97,8 @@ HASH = {
   :bob => 'Marley', :mom => 'Barley', 
   :gods => 'Harley', :chris => 'Farley'} unless defined?(HASH)
 ARRAY = HASH.keys unless defined?(ARRAY)
-puts "convenience vars:"
-puts "HASH#{HASH}"
-puts "ARRAY#{ARRAY}"
+puts "#{irbrc_header} convenience vars:"
+print Wirble::Colorize.colorize_string "  HASH ", :light_green
+p HASH;
+print Wirble::Colorize.colorize_string "  ARRAY ", :light_green 
+p ARRAY;
