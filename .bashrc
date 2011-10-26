@@ -14,6 +14,7 @@ fi
 bind 'set match-hidden-files off'
 
 set -b
+set echo-control-characters off
 
 shopt -s extglob
 shopt -s checkwinsize
@@ -21,6 +22,7 @@ shopt -s checkwinsize
 # Space-triggered completion for '!'
 bind Space:magic-space
 
+HISTTIMEFORMAT='[%T] '
 HISTIGNORE="clear:reset:history:exit:pd:up:down:..:cd..:cd ..:cd:ls:lsf:lsr:lsrf:lsd:[bf]g"
 HISTCONTROL=erasedups:ignoreboth
 HISTSIZE=2000

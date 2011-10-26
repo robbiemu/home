@@ -128,7 +128,7 @@ function p {
 GREP_COLOR="1;33"
 alias grep='grep --color=auto'
 
-alias less='less -F -M --HILITE-UNREAD -x3 -R'
+alias less='less -F -M -J --HILITE-UNREAD -x3 -R'
 
 alias history='history | less +G'
 alias env="env | grep --color=always -P '^.*?\='"
