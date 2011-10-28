@@ -1,0 +1,4 @@
+#!/bin/bash
+
+echo git commit -a -m "freshening"
+git commit -a -m "freshening"
