@@ -1,16 +1,16 @@
 # encoding: UTF-8
 irbrc_message_state="error"
 irbrc_header="[irbrc]"
-irbrc_error_header="\033[1;31m#{irbrc_header}\033[0m"
-irbrc_warn_header="\033[1;33m#{irbrc_header}\033[0m"
-irbrc_debug_header="\033[0;32m#{irbrc_header}\033[0m"
+irbrc_error_header="\e[1;31m#{irbrc_header}\e[0m"
+irbrc_warn_header="\e[1;33m#{irbrc_header}\e[0m"
+irbrc_debug_header="\e[0;32m#{irbrc_header}\e[0m"
 
 requires=[
     {:vi => 'interactive_editor'}, 
     {:bond => 'bond'}, 
     {:benchmark => 'benchmark'}, 
     {:ap => 'awesome_print'},
-    "#{ENV['HOME']}/bin/ap_helper"
+    "#{ENV['HOME']}/bin/ap_helper" #Strings don't list as included at startup
 ]
 requires.insert(0, {:gem => 'rubygems'}) unless defined? Gem
 
@@ -51,6 +51,12 @@ requires.each do |h|
             srq.rq lib, name
         end
     end
+end
+
+# table formatting, auto-pager
+#auto-pager usually broken
+if defined? Hirb
+    Hirb.enable
 end
 
 # tab completion for filesystem
@@ -103,7 +109,7 @@ IRB.conf[:EVAL_HISTORY] = 200
 
 IRB.conf[:PROMPT][:CUSTOM] = {
     :PROMPT_N => "#{$0}(%m):%03n % ", #indented
-    :PROMPT_I => "#{$0}(%m):%03n \033[1;33m%\033[0m ", #normal
+    :PROMPT_I => "#{$0}(%m):%03n \001\e[1;33m\002%\001\e[0m\002 ", #normal
     :PROMPT_S => nil, #string continue
     :PROMPT_C => "#{$0}(%m):%03n % ", #statement continue
     :RETURN => "%s\n" #format return value
