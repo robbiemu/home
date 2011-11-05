@@ -32,4 +32,11 @@ shopt -s histappend
 bind '"\e[A":history-search-backward'  
 bind '"\e[B":history-search-forward' 
 
+#load rvm if present
+if [[ -d "$HOME/.rvm" ]]; then
+    [[ -s "$HOME/.rvm/scripts/rvm" ]] && . "$HOME/.rvm/scripts/rvm"
+RBXOPT="-X19 bin/rbx -v"
+fi
+
 export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm" # Load RVM into a shell session *as a function*
