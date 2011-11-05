@@ -146,7 +146,7 @@ class Object
         rescue
             puts "failed to convert method #{method} to sym"
         end
-        self.method(method).to_s.match(/\((.*)\)/)[1]
+        (self.method(method).to_s.match(/\((.*)\)/) || [nil,self.class.to_s])[1]
     end
 end
 
