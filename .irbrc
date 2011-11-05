@@ -42,7 +42,7 @@ if defined? Benchmark
 end
 
 # Highlighting and other features
-if defined? AwesomePrint
+if defined? APHelper
     AwesomePrint.local_defaults({
       :multiline => false,
       :indent    => 2,

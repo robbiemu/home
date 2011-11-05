@@ -36,6 +36,9 @@ class AwesomePrint
     end
 end
 
+class APHelper
+end
+
 module Kernel
     def ap(object, options = AwesomePrint.local_defaults)
         puts object.ai(options)
