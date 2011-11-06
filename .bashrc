@@ -8,7 +8,7 @@ MANPATH=${MANPATH}:~/bin/man:~/bin/share/man
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 PAGER=less
 
-if [ -f /etc/bash_completion ]; then
+if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
 bind 'set match-hidden-files off'
@@ -17,6 +17,9 @@ set -b
 set echo-control-characters off
 
 shopt -s extglob
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
 shopt -s checkwinsize
 
 # Space-triggered completion for '!'
@@ -39,4 +42,3 @@ RBXOPT="-X19 bin/rbx -v"
 fi
 
 export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`
-[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm" # Load RVM into a shell session *as a function*

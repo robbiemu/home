@@ -1,4 +1,11 @@
 # encoding: UTF-8
+if defined?(Encoding) then
+  Encoding.default_external = 'utf-8'
+  Encoding.default_internal = 'utf-8'
+else
+  $KCODE = 'utf-8'
+end
+
 irbrc_message_state="error"
 irbrc_header="[irbrc]"
 irbrc_error_header="\e[1;31m#{irbrc_header}\e[0m"
@@ -10,7 +17,7 @@ requires=[
     {:bond => 'bond'}, 
     {:benchmark => 'benchmark'}, 
     {:ap => 'awesome_print'},
-    "#{ENV['HOME']}/bin/ap_helper" #Strings don't list as included at startup
+    "#{ENV['HOME']}/bin/ap_helper", #Strings don't list as included at startup
 ]
 requires.insert(0, {:gem => 'rubygems'}) unless defined? Gem
 
@@ -37,7 +44,12 @@ class SafeRequire
             end
         rescue LoadError => e
             pref = (name.nil?)? "": " (with «#{lib_name}»)"
-            puts "#{@error}#{pref} could not load gem '#{lib}', reason:\n\t#{e.message}\n\n"
+            puts <<"EOF"
+#{@error}#{pref} could not load gem '#{lib}',
+#{path.inspect} in #{__FILE__}:#{__LINE__-2} Reason:
+\t#{e.message}
+ 
+EOF
         end
     end
 end
@@ -54,7 +66,7 @@ requires.each do |h|
 end
 
 # table formatting, auto-pager
-#auto-pager usually broken
+    #auto-pager usually broken
 if defined? Hirb
     Hirb.enable
 end
@@ -103,9 +115,34 @@ end
 IRB.conf[:BACKTRACE_LIMIT]=6
 
 #set up a history file ..one for each version of ruby we have installed
+#IRB.conf[:HISTORY_FILE] = "#{ENV['HOME']}/.#{$0}_history"
 IRB.conf[:SAVE_HISTORY] = 1000
-IRB.conf[:HISTORY_FILE] = "#{ENV['HOME']}/.#{$0}_history"
 IRB.conf[:EVAL_HISTORY] = 200
+IRB.conf[:REJECT_HISTORY] = [ 
+    /^history/, 
+    /^h\!/, 
+    /^\s+/, 
+    /^(?:exit|quit)\s*$/ 
+] #custom
+
+# clean history and write it out:
+IRB.conf[:AT_EXIT] << proc { 
+    new_history=[]
+    uniq_history=Readline::HISTORY.sort.uniq.deep_clone
+    Readline::HISTORY.to_a.each do |cmd| 
+        if uniq_history.include? cmd
+            new_history.push cmd
+            uniq_history.delete cmd
+        end
+    end
+    IRB.conf[:REJECT_HISTORY].each do |r|
+        new_history.reject! {|x| x =~ r}
+    end
+    verbose=$VERBOSE
+    $VERBOSE=nil
+    Readline::HISTORY=new_history
+    $VERBOSE=verbose
+}
 
 IRB.conf[:PROMPT][:CUSTOM] = {
     :PROMPT_N => "#{$0}(%m):%03n % ", #indented
@@ -116,10 +153,74 @@ IRB.conf[:PROMPT][:CUSTOM] = {
 }
 IRB.conf[:PROMPT_MODE]=:CUSTOM
 
+module Kernel
+module_function
+    
+    def ri2(search)
+        puts `ri2 #{search}`
+    end
+
+    def history
+        i=0; 
+        Readline::HISTORY.to_a.each do |x| 
+            i+=1; 
+            puts "[#{i.to_s.send(:white)}] #{x.send(:yellowish)}\n" 
+        end
+        Readline::HISTORY
+    end
+
+    def h!(arg=(Readline::HISTORY.to_a.length), sym=:list)
+        case arg
+        when Fixnum then
+            i=arg-1
+            puts Readline::HISTORY.to_a[i]
+            eval(Readline::HISTORY.to_a[i], conf.workspace.binding)
+        when String, Regexp then
+            arexp = arg.to_regexp
+            case sym
+            when :list then
+                i=0
+                outp=[]
+                Readline::HISTORY.to_a[0..-2].each do |cmd| 
+                    i+=1; 
+                    outp.push [cmd, "[#{i.to_s.send(:white)}] #{cmd.send(:yellowish)}\n"]
+                end
+                outp.select {|cmd| cmd[0] =~ arexp }.each do |selected|
+                    print selected[1]
+                end
+                Readline::HISTORY
+            when :exec then
+                eval(Readline::HISTORY.to_a.select {|cmd| cmd =~ arexp }[-2], conf.workspace.binding)
+            end
+        end    
+    end
+end
 alias quit exit
 
-def ri2(search)
-    puts `ri2 #{search}`
+class String
+    def putf(path='~/Desktop/irb_dump.txt')
+      File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
+    end
+
+    def to_regexp
+        /#{self}/
+    end
+end
+
+class Regexp
+    # Convenience method on Regexp so you can do
+    # /an/.show_match("banana") # => "b<<an>>ana" 
+    def show_match(str)
+      if self =~ str then
+        "#{$`}<<#{$&}>>#{$'}"
+      else
+        "no match"
+      end
+    end
+    
+    def to_regexp
+        self
+    end
 end
 
 class Object
@@ -153,6 +254,11 @@ class Object
             puts "failed to convert method #{method} to sym"
         end
         (self.method(method).to_s.match(/\((.*)\)/) || [nil,self.class.to_s])[1]
+    end
+
+    # Give every object a rudimentary deep clone
+    def deep_clone
+        Marshal.load( Marshal.dump(self) )
     end
 end
 
