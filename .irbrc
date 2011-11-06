@@ -46,7 +46,7 @@ class SafeRequire
             pref = (name.nil?)? "": " (with «#{lib_name}»)"
             puts <<"EOF"
 #{@error}#{pref} could not load gem '#{lib}',
-#{path.inspect} in #{__FILE__}:#{__LINE__-2} Reason:
+"#{path.inspect}" in '#{__FILE__}:#{__LINE__-2}' Reason:
 \t#{e.message}
  
 EOF
