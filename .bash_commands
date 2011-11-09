@@ -102,10 +102,10 @@ function lp {
         case $1 in
         -a)
             shift 1;
-            (${ps} aux | grep $@)
+            (${ps} aux | grep --color=auto $@)
             ;;
         *)
-            (${ps} aux | sed -e 's/\S*\s*\([0-9]*\).*\:[0-9][0-9]\s*\(.*\)/\1 \2/' | grep $@)
+            (${ps} aux | sed -e 's/\S*\s*\([0-9]*\).*\:[0-9][0-9]\s*\(.*\)/\1 \2/' | grep --color=auto $@)
             ;;
         esac
     fi
@@ -123,6 +123,62 @@ function p {
         echo "${filename} not writable"
         return 1
     fi
+}
+
+function defs()
+{
+    ruby -e "`cat <<EOF
+    functions=%x{ bash -c '. ~/.bashrc && declare -f' 2>/dev/null }
+    hf=Hash[functions.scan(/^(\w+) \(\).*?^\{(.*?)^\}/m)]
+
+    aliases=%x{ bash -c '. ~/.bashrc && alias' 2>/dev/null }
+    ha=Hash[aliases.scan(/^alias\ ([^=]+)=\'(.*?)\'\n/m)]
+
+    defs=ha.merge hf
+    defs.reject!{|k,v|k =~ /^_|rvm|^(defs{0,1})$/ || v =~ /_rvm/m} unless "$1" == "-a"
+    cdefs = defs.keys
+    cdefs.sort!.map! do |k|
+        if ha.key? k
+            k = "\e[01;32m#{k}\e[00m"
+        else
+            k = "\e[00;32m#{k}\e[00m"
+        end
+    end
+    columns=%x{echo "#{defs.keys.sort.join("\n")}" | column | tail -1 | wc -w}
+    columns.chomp!
+    columns = columns.to_i
+    x=0
+    y=columns - 1
+    out=""
+    while (x<cdefs.length) do
+        out+=cdefs[x..y].join"\t"
+        out+="\n"
+        x+=columns
+        y+=columns
+    end
+    puts out
+EOF
+`" | column -t
+}
+
+function def()
+{
+    ruby -e "`cat <<EOF
+    aliases=%x{ bash -c '. ~/.bashrc && alias' 2>/dev/null }
+    ha=Hash[aliases.scan(/^alias\ ([^=]+)=\'(.*?)\'\n/m)]
+    
+    if ha.key? "$@"
+        print "alias $@='#{ha["$@"]}'\n"
+    end
+
+    functions=%x{ bash -c '. ~/.bashrc && declare -f' 2>/dev/null }
+    hf=Hash[functions.scan(/^(\w+) \(\).*?^\{(.*?)^\}/m)]
+
+    if hf.key? "$@"
+        print "function $@ ()\n{\n#{hf["$@"]}\n}\n"
+    end
+EOF
+`"
 }
 
 GREP_COLOR="1;33"

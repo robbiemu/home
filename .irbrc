@@ -13,6 +13,7 @@ irbrc_warn_header="\e[1;33m#{irbrc_header}\e[0m"
 irbrc_debug_header="\e[0;32m#{irbrc_header}\e[0m"
 
 requires=[
+#    {:hirb => {:lib => 'hirb', :post => lambda { Hirb.enable}}},
     {:vi => 'interactive_editor'}, 
     {:bond => 'bond'}, 
     {:benchmark => 'benchmark'}, 
