@@ -128,13 +128,16 @@ class Symbol
 end
 
 class String
+    COMILLA_START=171.chr("utf-8").color(:gray)
+    COMILLA_END=187.chr("utf-8").color(:gray)
+
     def putf(path='~/Desktop/irb_dump.txt')
       File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
     end
     
     alias :_inspect :inspect    
     def inspect
-        "#{'"'.color(:gray)}#{self.to_s.color(:brown)}#{'"'.color(:gray)}"
+        "#{COMILLA_START}#{self.to_s.color(:brown)}#{COMILLA_END}"
     end
 end
 
