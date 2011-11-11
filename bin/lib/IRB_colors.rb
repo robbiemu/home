@@ -1,3 +1,19 @@
+class String    
+    %w(gray red green yellow blue purple cyan white).each_with_index do |color, i|
+        const_set(color.upcase.to_sym, "\033[1;#{30+i}m")
+    end
+    %w(black darkred darkgreen brown navy darkmagenta darkcyan lightgray).each_with_index do |color, i|
+        const_set(color.upcase.to_sym, "\033[0;#{30+i}m")
+    end
+    DARKGRAY=GRAY
+    RESET="\033[0m"
+
+    def color(colorname)
+        color=self.class.const_get(colorname.upcase.to_sym)
+        "#{color}#{self}#{RESET}"
+    end
+end
+
 module Kernel
 module_function
     alias :_p :p
