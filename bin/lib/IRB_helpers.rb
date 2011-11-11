@@ -221,6 +221,6 @@ HASH = {
   :bob => 'b', :mom => 'm', 
   :gods => 0, :devils => 1.0/0} unless defined?(HASH)
 ARRAY = HASH.keys unless defined?(ARRAY)
-IRB.notify("variables de conveniencia definidas: [" + "HASH".color(:darkmagenta) + "," + " ARRAY".color(:darkgreen) + "]", :warn)
+IRB.notify("variables de conveniencia definidas:" + " [".color(:darkgreen) + "HASH".color(:purple) + "," + " ARRAY".color(:green) + "]".color(:darkgreen), :warn)
 
 

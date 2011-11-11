@@ -1,3 +1,4 @@
+# encoding: UTF-8
 class String    
     %w(gray red green yellow blue purple cyan white).each_with_index do |color, i|
         const_set(color.upcase.to_sym, [1, 30+i])
@@ -123,21 +124,16 @@ end
 class Symbol
     alias :_inspect :inspect
     def inspect
-        "#{':'.color(:lightgray)}#{self.id2name.color(:darkcyan)}"
+        "#{':'.color(:darkgray)}#{self.id2name.color(:darkcyan)}"
     end
 end
 
 class String
-    COMILLA_START=171.chr("utf-8").color(:gray)
-    COMILLA_END=187.chr("utf-8").color(:gray)
-
     def putf(path='~/Desktop/irb_dump.txt')
       File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
     end
-    
-    alias :_inspect :inspect    
     def inspect
-        "#{COMILLA_START}#{self.to_s.color(:brown)}#{COMILLA_END}"
+        %<#{'"'.color(:darkgray)}#{self.to_s.color(:brown)}#{'"'.color(:darkgray)}>
     end
 end
 
@@ -152,7 +148,7 @@ class Hash
     alias :_inspect :inspect
     def inspect
         outp=[]
-        pairing=":".color(:darkmagenta)
+        pairing="=>".color(:darkmagenta)
         self.each do |k,v|
             if v.is_a? String
                 v=v.dump.gsub!(/^"|"$/, "")
@@ -160,7 +156,7 @@ class Hash
             if k.is_a? String
                 k=k.dump.gsub!(/^"|"$/, "")
             end
-            outp.push "#{k.inspect}#{pairing} #{v.inspect}"
+            outp.push "#{k.inspect} #{pairing} #{v.inspect}"
         end
         "{".color(:darkmagenta) + outp.join(", ") + "}".color(:darkmagenta)
     end
@@ -171,9 +167,9 @@ class Hash
         self.each do |k,v|
             case k
             when Symbol then
-                k=":#{k}"
+                k="#{k}:"
             when String then
-                k=%|"#{k}"|
+                k=%|"#{k}":|
             end
             case v
             when Symbol then
