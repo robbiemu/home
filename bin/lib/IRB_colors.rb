@@ -1,15 +1,22 @@
 class String    
     %w(gray red green yellow blue purple cyan white).each_with_index do |color, i|
-        const_set(color.upcase.to_sym, "\e[1;#{30+i}m")
+        const_set(color.upcase.to_sym, [1, 30+i])
     end
     %w(black darkred darkgreen brown navy darkmagenta darkcyan lightgray).each_with_index do |color, i|
-        const_set(color.upcase.to_sym, "\e[0;#{30+i}m")
+        const_set(color.upcase.to_sym, [0, 30+i])
     end
     DARKGRAY=GRAY
     RESET="\e[0m"
 
     def color(colorname)
-        color=self.class.const_get(colorname.upcase.to_sym)
+        color=String.const_get(colorname.upcase.to_sym)
+        color="\e[#{color[0]};#{color[1]}m"
+        "#{color}#{self}#{RESET}"
+    end
+    
+    def bg_color(colorname)
+        color=String.const_get(colorname.upcase.to_sym)
+        color="\e[#{color[0]};#{color[1]+10}m"
         "#{color}#{self}#{RESET}"
     end
 end
@@ -49,7 +56,23 @@ end
 class Class
     alias :_inspect :inspect
     def inspect
-        to_s.color(:yellow)
+        if self.ancestors.member? Array
+            to_s.color(:green)
+        elsif self.ancestors.member? Hash
+            to_s.color(:purple)
+        elsif self.ancestors.member? Numeric
+            to_s.color(:blue)
+        elsif [FalseClass, NilClass].any? {|c| self.ancestors.member? c }
+            to_s.color(:darkred)
+        elsif self.ancestors.member? TrueClass
+            to_s.color(:white)
+        elsif self.to_s == "Module"
+            to_s.color(:lightgray)
+        elsif self.class.ancestors.member? Class
+            to_s.color(:yellow)
+        else
+            to_s.color(:lightgray)
+        end
     end    
 end
 
@@ -80,7 +103,7 @@ end
 class TrueClass
     alias :_inspect :inspect
     def inspect
-        "true".color(:green)
+        "true".color(:cyan)
     end
     def to_s
         "true"
@@ -126,7 +149,7 @@ class Hash
     alias :_inspect :inspect
     def inspect
         outp=[]
-        pairing=":".color(:navy)
+        pairing=":".color(:darkmagenta)
         self.each do |k,v|
             if v.is_a? String
                 v=v.dump.gsub!(/^"|"$/, "")
@@ -136,7 +159,7 @@ class Hash
             end
             outp.push "#{k.inspect}#{pairing} #{v.inspect}"
         end
-        "{".color(:navy) + outp.join(", ") + "}".color(:navy)
+        "{".color(:darkmagenta) + outp.join(", ") + "}".color(:darkmagenta)
     end
 
     alias :_to_s :to_s
@@ -155,7 +178,7 @@ class Hash
             when String then
                 v=%|"#{v}"|
             end
-            outp.push "#{k.to_s}=>#{v.to_s}"
+            outp.push "#{k.to_s}: #{v.to_s}"
         end
         "{#{outp.join(", ")}}"
     end
