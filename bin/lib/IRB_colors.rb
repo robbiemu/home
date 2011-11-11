@@ -1,12 +1,12 @@
 class String    
     %w(gray red green yellow blue purple cyan white).each_with_index do |color, i|
-        const_set(color.upcase.to_sym, "\033[1;#{30+i}m")
+        const_set(color.upcase.to_sym, "\e[1;#{30+i}m")
     end
     %w(black darkred darkgreen brown navy darkmagenta darkcyan lightgray).each_with_index do |color, i|
-        const_set(color.upcase.to_sym, "\033[0;#{30+i}m")
+        const_set(color.upcase.to_sym, "\e[0;#{30+i}m")
     end
     DARKGRAY=GRAY
-    RESET="\033[0m"
+    RESET="\e[0m"
 
     def color(colorname)
         color=self.class.const_get(colorname.upcase.to_sym)
@@ -126,7 +126,7 @@ class Hash
     alias :_inspect :inspect
     def inspect
         outp=[]
-        pairing="=>".color(:navy)
+        pairing=":".color(:navy)
         self.each do |k,v|
             if v.is_a? String
                 v=v.dump.gsub!(/^"|"$/, "")
@@ -134,7 +134,7 @@ class Hash
             if k.is_a? String
                 k=k.dump.gsub!(/^"|"$/, "")
             end
-            outp.push "#{k.inspect} #{pairing} #{v.inspect}"
+            outp.push "#{k.inspect}#{pairing} #{v.inspect}"
         end
         "{".color(:navy) + outp.join(", ") + "}".color(:navy)
     end

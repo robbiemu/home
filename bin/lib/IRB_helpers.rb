@@ -11,7 +11,7 @@ module_function
         i=0; 
         Readline::HISTORY.to_a.each do |x| 
             i+=1; 
-            puts "[#{i.to_s.color(:white)}] #{x.color(:brown)}\n" 
+            puts "[#{i.to_s.color(:white)}] #{x.color(:brown)}" 
         end
         Readline::HISTORY
     end
@@ -89,15 +89,15 @@ module IRB
                     },
                     :debug =>  {
                         :level => 10, 
-                        :text => Proc.new{|this| "\e[0;32m#{this[:header][:text]}\e[0m"}
+                        :text => Proc.new{|this| this[:header][:text].color(:green)}
                     },
                     :warn => {
                         :level => 100, 
-                        :text => lambda{|this| "\e[1;33m#{this[:header][:text]}\e[0m"}
+                        :text => lambda{|this| this[:header][:text].color(:yellow)}
                     },
                     :error => {
                         :level => 1000, 
-                        :text => lambda{|this| "\e[1;31m#{this[:header][:text]}\e[0m"}
+                        :text => lambda{|this| this[:header][:text].color(:red)}
                     }
                 }
             end
@@ -221,6 +221,6 @@ HASH = {
   :bob => 'b', :mom => 'm', 
   :gods => 0, :devils => 1.0/0} unless defined?(HASH)
 ARRAY = HASH.keys unless defined?(ARRAY)
-IRB.notify("variables de conveniencia definidas: [\e[1;33mHASH, ARRAY\e[0m]", :warn)
+IRB.notify("variables de conveniencia definidas: [" + "HASH".color(:darkcyan) + "," + " ARRAY".color(:darkgreen) + "]", :warn)
 
 

@@ -55,7 +55,7 @@ IRB.conf[:AT_EXIT] << proc {
 }
 IRB.conf[:PROMPT][:CUSTOM] = {
     :PROMPT_N => "#{$0}(%m):%03n % ", #indented
-    :PROMPT_I => "#{$0}(%m):%03n \001\e[1;33m\002%\001\e[0m\002 ", #normal
+    :PROMPT_I => "#{$0}(%m):%03n \001" + "% ".color(:yellow) + "\002", #normal
     :PROMPT_S => nil, #string continue
     :PROMPT_C => "#{$0}(%m):%03n % ", #statement continue
     :RETURN => "%s\n" #format return value
