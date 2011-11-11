@@ -128,6 +128,12 @@ class Hash
         outp=[]
         pairing="=>".color(:navy)
         self.each do |k,v|
+            if v.is_a? String
+                v=v.dump.gsub!(/^"|"$/, "")
+            end
+            if k.is_a? String
+                k=k.dump.gsub!(/^"|"$/, "")
+            end
             outp.push "#{k.inspect} #{pairing} #{v.inspect}"
         end
         "{".color(:navy) + outp.join(", ") + "}".color(:navy)
@@ -160,7 +166,11 @@ class Array
     def inspect
         outp=[]
         self.each do |c|
-            outp.push "#{c.inspect}"
+            if c.is_a? String
+                outp.push c.dump.gsub!(/^"|"$/, "")
+            else
+                outp.push "#{c.inspect}"
+            end
         end
         "[".color(:darkgreen) + outp.join(", ") + "]".color(:darkgreen)
     end
