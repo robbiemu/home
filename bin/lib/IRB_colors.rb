@@ -22,7 +22,7 @@ class Object
     alias :_inspect :inspect    
     def object_inspect(recycle=nil)
         x = (recycle.nil?)? _inspect : recycle.to_s
-        x.sub!(/#{self.class}/, self.class.to_s.color(:yellow)) || _inspect
+        x.sub!(/#{self.class}/, self.class.inspect) || _inspect
         x=x.gsub(/(^#<|>$)/, '\1'.to_s.color(:lightgray)).gsub(/(\s*=>{0,1}\s*)/, ' \1 '.to_s.color(:navy))
     end
     def inspect
@@ -30,8 +30,15 @@ class Object
     end
 end
 
-class Proc
+class Class
     alias :_inspect :inspect
+    def inspect
+        to_s.color(:yellow)
+    end    
+end
+
+class Proc
+    alias :_proc_level_inspect :inspect
     def inspect
         x=_inspect
         if x =~ /\(lambda\).*\>/
