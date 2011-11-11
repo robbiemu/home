@@ -39,7 +39,7 @@ class Object
     def object_inspect(recycle=nil)
         x = (recycle.nil?)? _inspect : recycle.to_s
         x.sub!(/#{self.class}/, self.class.inspect) || _inspect
-        x=x.gsub(/(^#<|>$)/, '\1'.to_s.color(:lightgray)).gsub(/(\s*=>{0,1}\s*)/, ' \1 '.to_s.color(:navy))
+        x=x.gsub(/(^#<|>$)/, '\1'.to_s.color(:lightgray)).gsub(/(\@\S+)(=)/, '\1 \2 ')
     end
     def inspect
         object_inspect 
@@ -67,17 +67,6 @@ class Proc
     end
 end
 
-class String
-    def putf(path='~/Desktop/irb_dump.txt')
-      File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
-    end
-    
-    alias :_inspect :inspect    
-    def inspect
-        "#{'"'.color(:gray)}#{self.to_s.color(:brown)}#{'"'.color(:gray)}"
-    end
-end
-
 class NilClass
     alias :_inspect :inspect
     def inspect
@@ -88,10 +77,41 @@ class NilClass
     end
 end
 
+class TrueClass
+    alias :_inspect :inspect
+    def inspect
+        "true".color(:green)
+    end
+    def to_s
+        "true"
+    end
+end
+
+class FalseClass
+    alias :_inspect :inspect
+    def inspect
+        "false".color(:red)
+    end
+    def to_s
+        "false"
+    end
+end
+
 class Symbol
     alias :_inspect :inspect
     def inspect
         "#{':'.color(:lightgray)}#{self.id2name.color(:darkcyan)}"
+    end
+end
+
+class String
+    def putf(path='~/Desktop/irb_dump.txt')
+      File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
+    end
+    
+    alias :_inspect :inspect    
+    def inspect
+        "#{'"'.color(:gray)}#{self.to_s.color(:brown)}#{'"'.color(:gray)}"
     end
 end
 
@@ -105,8 +125,15 @@ end
 class Hash
     alias :_inspect :inspect
     def inspect
-        object_inspect
+        outp=[]
+        pairing="=>".color(:navy)
+        self.each do |k,v|
+            outp.push "#{k.inspect} #{pairing} #{v.inspect}"
+        end
+        "{".color(:navy) + outp.join(", ") + "}".color(:navy)
     end
+
+    alias :_to_s :to_s
     def to_s
         outp=[]
         self.each do |k,v|
@@ -122,13 +149,23 @@ class Hash
             when String then
                 v=%|"#{v}"|
             end
-            outp.push "#{k.to_s} => #{v.to_s}"
+            outp.push "#{k.to_s}=>#{v.to_s}"
         end
         "{#{outp.join(", ")}}"
     end
 end
 
 class Array
+    alias :_inspect :inspect
+    def inspect
+        outp=[]
+        self.each do |c|
+            outp.push "#{c.inspect}"
+        end
+        "[".color(:darkgreen) + outp.join(", ") + "]".color(:darkgreen)
+    end
+    
+    alias :_to_s :to_s
     def to_s
         outp=[]
         self.each do |c|
