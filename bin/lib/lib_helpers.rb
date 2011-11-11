@@ -43,46 +43,6 @@ IRB.srq.lib_pack(:awesome_print => {
 
         module Kernel
         module_function
-            
-            def ri2(search)
-                puts `ri2 #{search}`
-            end
-
-            def history
-                i=0; 
-                Readline::HISTORY.to_a.each do |x| 
-                    i+=1; 
-                    puts "[#{i.to_s.send(:white)}] #{x.send(:yellowish)}\n" 
-                end
-                Readline::HISTORY
-            end
-
-            def h!(arg=(Readline::HISTORY.to_a.length), sym=:list)
-                case arg
-                when Fixnum then
-                    i=arg-1
-                    puts Readline::HISTORY.to_a[i]
-                    eval(Readline::HISTORY.to_a[i], conf.workspace.binding)
-                when String, Regexp then
-                    arexp = arg.to_regexp
-                    case sym
-                    when :list then
-                        i=0
-                        outp=[]
-                        Readline::HISTORY.to_a[0..-2].each do |cmd| 
-                            i+=1; 
-                            outp.push [cmd, "[#{i.to_s.send(:white)}] #{cmd.send(:yellowish)}\n"]
-                        end
-                        outp.select {|cmd| cmd[0] =~ arexp }.each do |selected|
-                            print selected[1]
-                        end
-                        Readline::HISTORY
-                    when :exec then
-                        eval(Readline::HISTORY.to_a.select {|cmd| cmd =~ arexp }[-2], conf.workspace.binding)
-                    end
-                end    
-            end
-
             def ap(object, options = AwesomePrint.local_defaults)
                 puts object.ai(options)
                 object

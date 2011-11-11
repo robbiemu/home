@@ -10,13 +10,13 @@ $LOAD_PATH << "#{ENV['HOME']}/bin/lib"
 require 'IRB_helpers'
 IRB.srq.require_from "lib_helpers"
 IRB.srq.require(
-    :awesome_print, 
+#    :awesome_print, 
     :benchmark, 
     :bond, 
     :interactive_editor, 
     :std_helpers
 )
-IRB.notify("para su holgara - #{IRB.srq.loaded}", :warn)
+IRB.notify("para su holgara - #{IRB.srq.loaded.inspect}", :warn)
 
 
 #§ standard IRB config
@@ -38,12 +38,13 @@ IRB.conf[:REJECT_HISTORY] = [
 IRB.conf[:AT_EXIT] << proc { 
     new_history=[]
     uniq_history=Readline::HISTORY.sort.uniq.deep_clone
-    Readline::HISTORY.to_a.each do |cmd| 
+    Readline::HISTORY.to_a.reverse.each do |cmd| 
         if uniq_history.include? cmd
             new_history.push cmd
             uniq_history.delete cmd
         end
     end
+    new_history.reverse!
     IRB.conf[:REJECT_HISTORY].each do |r|
         new_history.reject! {|x| x =~ r}
     end

@@ -1,22 +1,51 @@
 # encoding: UTF-8
+require 'IRB_colors'
 
 module Kernel
 module_function
-    
     def ri2(search)
         puts `ri2 #{search}`
     end
-end
+    
+    def history
+        i=0; 
+        Readline::HISTORY.to_a.each do |x| 
+            i+=1; 
+            puts "[#{i.to_s.color(:white)}] #{x.color(:brown)}\n" 
+        end
+        Readline::HISTORY
+    end
 
-class String
-    def putf(path='~/Desktop/irb_dump.txt')
-      File.open(File.expand_path(path), 'w') { |fh| fh.write(self) }
+    def h!(arg=(Readline::HISTORY.to_a.length), sym=:list)
+        case arg
+        when Fixnum then
+            i=arg-1
+            puts Readline::HISTORY.to_a[i]
+            eval(Readline::HISTORY.to_a[i], conf.workspace.binding)
+        when String, Regexp then
+            arexp = arg.to_regexp
+            case sym
+            when :list then
+                i=0
+                outp=[]
+                Readline::HISTORY.to_a[0..-2].each do |cmd| 
+                    i+=1; 
+                    outp.push [cmd, "[#{i.to_s.color(:white)}] #{cmd.color(:brown)}\n"]
+                end
+                outp.select {|cmd| cmd[0] =~ arexp }.each do |selected|
+                    print selected[1]
+                end
+                Readline::HISTORY
+            when :exec then
+                eval(Readline::HISTORY.to_a.select {|cmd| cmd =~ arexp }[-2], conf.workspace.binding)
+            end
+        end    
     end
 end
 
 class Object
     # Return only the methods not present on basic objects
-    def my_methods
+    def local_methods
         (self.methods - Object.new.methods).sort
     end
     
@@ -60,7 +89,7 @@ module IRB
                     },
                     :debug =>  {
                         :level => 10, 
-                        :text => lambda{|this| "\e[0;32m#{this[:header][:text]}\e[0m"}
+                        :text => Proc.new{|this| "\e[0;32m#{this[:header][:text]}\e[0m"}
                     },
                     :warn => {
                         :level => 100, 
@@ -108,6 +137,7 @@ module IRB
             puts "#{header} #{message}" unless header.nil?
         end
     end
+    
     class << self
         attr_accessor :notifier
         def notify(*args)
