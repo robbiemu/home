@@ -167,10 +167,9 @@ class Array
         outp=[]
         self.each do |c|
             if c.is_a? String
-                outp.push c.dump.gsub!(/^"|"$/, "")
-            else
-                outp.push "#{c.inspect}"
+                c=c.dump.gsub!(/^"|"$/, "")
             end
+            outp.push "#{c.inspect}"
         end
         "[".color(:darkgreen) + outp.join(", ") + "]".color(:darkgreen)
     end
