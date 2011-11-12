@@ -6,18 +6,158 @@ else
   $KCODE = 'utf-8'
 end
 
-$LOAD_PATH << "#{ENV['HOME']}/bin/lib"
-require 'IRB_helpers'
-IRB.srq.require_from "lib_helpers"
-IRB.srq.require(
-#    :awesome_print, 
-    :benchmark, 
-    :bond, 
-    :interactive_editor, 
-    :std_helpers
-)
-IRB.notify("para su holgara - #{IRB.srq.loaded.inspect}", :warn)
 
+#§ irb-specific monkey patches
+
+class String
+    %w(gray red green yellow blue purple cyan white).each_with_index do |color, i|
+        const_set(color.upcase.to_sym, [1, 30+i])
+    end
+    %w(black darkred darkgreen brown navy darkmagenta darkcyan lightgray).each_with_index do |color, i|
+        const_set(color.upcase.to_sym, [0, 30+i])
+    end
+    DARKGRAY=GRAY
+    RESET="\e[0m"
+
+    def color(colorname)
+        color=String.const_get(colorname.upcase.to_sym)
+        color="\e[#{color[0]};#{color[1]}m"
+        "#{color}#{self}#{RESET}"
+    end
+    
+    def bg_color(colorname)
+        color=String.const_get(colorname.upcase.to_sym)
+        color="\e[#{color[0]};#{color[1]+10}m"
+        "#{color}#{self}#{RESET}"
+    end
+end
+
+module Kernel
+module_function
+    def ri2(search)
+        puts `ri2 #{search}`
+    end
+    
+    def history
+        i=0; 
+        Readline::HISTORY.to_a.each do |x| 
+            i+=1; 
+            puts "[#{i.to_s.color(:white)}] #{x.color(:brown)}" 
+        end
+        Readline::HISTORY
+    end
+
+    def h!(arg=(Readline::HISTORY.to_a.length), sym=:list)
+        case arg
+        when Fixnum then
+            i=arg-1
+            puts Readline::HISTORY.to_a[i]
+            eval(Readline::HISTORY.to_a[i], conf.workspace.binding)
+        when String, Regexp then
+            arexp = arg.to_regexp
+            case sym
+            when :list then
+                i=0
+                outp=[]
+                Readline::HISTORY.to_a[0..-2].each do |cmd| 
+                    i+=1; 
+                    outp.push [cmd, "[#{i.to_s.color(:white)}] #{cmd.color(:brown)}\n"]
+                end
+                outp.select {|cmd| cmd[0] =~ arexp }.each do |selected|
+                    print selected[1]
+                end
+                Readline::HISTORY
+            when :exec then
+                eval(Readline::HISTORY.to_a.select {|cmd| cmd =~ arexp }[-2], conf.workspace.binding)
+            end
+        end    
+    end
+end
+
+class Object
+    # Return only the methods not present on basic objects
+    def local_methods
+        (self.methods - Object.new.methods).sort
+    end
+    
+    def provides(methods=[])
+        re=[]
+        methods=[methods] unless methods.class == Array
+        methods.each do |m|
+            re += my_methods.map(&:to_s).grep(/#{m}/)
+        end
+        re
+    end
+
+    def provides?(method)
+        if method.class == String
+            my_methods.member? method.to_sym
+        elsif method.class == Symbol
+            my_methods.member? method
+        end
+    end
+
+    # Return the provider of a method
+    def whence(method)
+        begin
+            method=method.to_sym
+        rescue
+            puts "failed to convert method #{method} to sym"
+        end
+        (self.method(method).to_s.match(/\((.*)\)/) || [nil,self.class.to_s])[1]
+    end
+end
+
+    #handy predefined objects
+HASH = { 
+  :bob => 'b', :mom => 'm', 
+  :gods => 0, :devils => 1.0/0} unless defined?(HASH)
+ARRAY = HASH.keys unless defined?(ARRAY)
+puts "[irbrc] ".color(:darkgreen) + "variables de conveniencia definidas: [HASH, ARRAY]"
+
+
+#§ require libs
+
+$LOAD_PATH << "#{ENV['HOME']}/bin/lib"
+gems=[]
+#gems.push :awesome_print => nil
+gems.push [
+    std_helpers: nil,
+    benchmark: lambda{     
+        module Kernel
+        module_function
+            def time(repetitions=100, &block)
+                Benchmark.bmbm do |b|
+                    b.report {repetitions.times &block} 
+                end
+                nil
+            end
+        end
+    },
+    bond: lambda{
+        begin
+            Bond.start
+        rescue LoadError => e
+            puts "[irbrc] ".color(:red) +  "could not use Bond gem, falling back to irb/completion.\nReason:\n\t#{e.message}\n"
+            unless IRB.conf[:LOAD_MODULES].include?('irb/completion')
+                IRB.conf[:LOAD_MODULES] << 'irb/completion'
+            end
+        end
+    },
+    interactive_editor: nil
+]
+GEMS=[]
+gems.flatten!.each do |h| h.each do |lib,callback|
+    begin
+        require lib.to_s
+        callback.yield unless callback.nil?        
+    rescue LoadError => e
+        puts "[irbrc] ".color(:red) +  "could not use '#{lib}' gem.\nReason:\n\t#{e.message}\n"
+    else
+        GEMS.push lib
+    end
+end;end
+puts "[irbrc] ".color(:darkgreen) + "gems cargadas #{GEMS}"
 
 #§ standard IRB config
 
