@@ -74,7 +74,7 @@ if 0.1**2 != 0.01 # patch Float so it works by default
             if op != :round
                 following op do |receiver, args|
                     if args[:return].is_a? Float
-                        ret=args[:return].round Float::DIG
+                        ret=args[:return].round (Float::DIG - (Float::DIG/5))
                         ret=Hash[:ret => ret]
                     end
                     ret
