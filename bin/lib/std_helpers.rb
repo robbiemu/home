@@ -50,11 +50,14 @@ module Hooker
                     private str_id                  # Make backup private
                     define_method sym do |*args|    # Replace method
                         ret = __send__ str_id, *args  # Invoke backup
-                        ret=((block.call(self,              # Invoke hook
+                        rval=block.call(self,              # Invoke hook
                           :method => sym, 
                           :args => args,
                           :return => ret
-                        )[:ret])||ret)
+                        )
+                        if not rval.nil?
+                            ret=rval[:ret]
+                        end
                         ret # Forward return value of method
                     end
                 end
@@ -74,8 +77,16 @@ if 0.1**2 != 0.01 # patch Float so it works by default
             if op != :round
                 following op do |receiver, args|
                     if args[:return].is_a? Float
-                        ret=args[:return].round (Float::DIG - (Float::DIG/5))
-                        ret=Hash[:ret => ret]
+                        argsin=[]
+                        args[:args].each do |c|
+                            argsin=c.rationalize
+                        end
+                        rval=receiver.rationalize.send(
+                                args[:method], 
+                                argsin
+                             )
+                             p "hi mom!"
+                        ret=Hash[:ret => rval.to_f]
                     end
                     ret
                 end
