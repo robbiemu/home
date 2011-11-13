@@ -5,6 +5,11 @@ class Object
     def local_methods
         (self.methods - Object.new.methods).sort
     end
+
+    # Return only exposed methods defined in the class, not in its ancestors    
+    def class_methods
+        self.methods.select {|m| not 0.1.method(m).to_s.match /\((.*)\)/}
+    end
     
     def provides(methods=[])
         re=[]
@@ -71,10 +76,11 @@ module Hooker
 end
 
 if 0.1**2 != 0.01 # patch Float so it works by default
-    class Float
-        include Hooker
-        0.1.local_methods.each do |op|
-            if op != :round
+    class Float   # known issues:
+        include Hooker #                 eval( float.** n ) throws a stack too deep
+        0.1.class_methods.each do |op| # float - n does not call like: float.send(:-, n)
+            if ( (not [:rationalize].member? op) and
+                 (0.1.method(op).arity != 0) and (0.1.whence(op) == "Float"))
                 following op do |receiver, args|
                     if args[:return].is_a? Float
                         argsin=[]
@@ -85,7 +91,6 @@ if 0.1**2 != 0.01 # patch Float so it works by default
                                 args[:method], 
                                 argsin
                              )
-                             p "hi mom!"
                         ret=Hash[:ret => rval.to_f]
                     end
                     ret
@@ -123,6 +128,12 @@ class Regexp
     
     def to_regexp
         self
+    end
+end
+
+class Array
+    def duplicates
+        self.group_by { |e| e }.select { |k,v| v.size > 1 }.map(&:first)
     end
 end
 
