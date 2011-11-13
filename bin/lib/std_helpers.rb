@@ -11,20 +11,22 @@ class Object
         self.methods.select {|m| not 0.1.method(m).to_s.match /\((.*)\)/}
     end
     
-    def provides(methods=[])
+    def provides(methods=[], type=:local)
+        type = :class if type != :local
         re=[]
         methods=[methods] unless methods.class == Array
         methods.each do |m|
-            re += local_methods.map(&:to_s).grep(/#{m}/).map(&:to_sym)
+            re += self.send("#{type}_methods").map(&:to_s).grep(/#{m}/).map(&:to_sym)
         end
         re
     end
 
-    def provides?(method)
+    def provides?(method, type=:local)
+        type = :class if type != :local
         if method.class == String
-            local_methods.member? method.to_sym
+            self.send("#{type}_methods").member? method.to_sym
         elsif method.class == Symbol
-            local_methods.member? method
+            self.send("#{type}_methods").member? method
         end
     end
 
