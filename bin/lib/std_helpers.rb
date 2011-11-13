@@ -15,16 +15,16 @@ class Object
         re=[]
         methods=[methods] unless methods.class == Array
         methods.each do |m|
-            re += my_methods.map(&:to_s).grep(/#{m}/)
+            re += local_methods.map(&:to_s).grep(/#{m}/).map(&:to_sym)
         end
         re
     end
 
     def provides?(method)
         if method.class == String
-            my_methods.member? method.to_sym
+            local_methods.member? method.to_sym
         elsif method.class == Symbol
-            my_methods.member? method
+            local_methods.member? method
         end
     end
 
