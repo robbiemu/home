@@ -189,4 +189,4 @@ alias less='/usr/bin/less -F -X -M -J --HILITE-UNREAD -x3 -R'
 alias history='history | less +G'
 alias env="env | grep --color=always -P '^.*?\='"
 
-export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+export `grep -P '^[^\=:space:]*?\=' $HOME/.bashrc | sed 's/=.*//g' |xargs`

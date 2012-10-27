@@ -41,4 +41,4 @@ if [[ -d "$HOME/.rvm" ]]; then
 RBXOPT="-X19 bin/rbx -v"
 fi
 
-export `grep -P '^[^\=:space:]*?\=' /home/rob/.bashrc | sed 's/=.*//g' |xargs`
+export `grep -P '^[^\=:space:]*?\=' $HOME/.bashrc | sed 's/=.*//g' |xargs`
