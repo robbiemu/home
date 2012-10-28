@@ -17,8 +17,8 @@ puts <<COG.gsub(/^\s*/,"")
 	${voffset 2}${font PizzaDude Bullets:size=14}2 ${font Droid Sans:size=8}User on github: ${alignr}#{gh_name}
 COG
 
-notifications=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/notifications).gsub!(/[\[\]]/, "").split
-if notifications.empty?
+notifications=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/notifications).split(/"/)[3]
+if notifications.nil?
 	puts "${voffset 8}${font Droid Sans:italic:size=8}no notifications$font"
 else
 	puts "${voffset 8}Notifications\n${hr 1}\n#{notifications.join /\n/}"
@@ -51,14 +51,14 @@ if not repos.empty?
 		
 		if days <= 0
 			message=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep message|head -1).split(/"/)[3]
-			name=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep name|head -1).split(/"/)[3]
+			name=%x(curl -s -u #{gh_name}:#{gh_pswd} httpsfont://api.github.com/repos/#{gh_name}/#{repo}/commits |grep name|head -1).split(/"/)[3]
 			#email=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep email|head -1).split(/"/)[3]
 			
-			puts "${font Droid Sans:Bold:size=9}#{repo}${font Droid Sans:italic:size=8} - updated #{ago}\n    by ${font Droid Sans:Bold:size=8}#{name}\n   ${font Droid Sans:italic:size=8}with message:${font Droid Sans:Bold:size=8}#{message}${font}"
+			puts "${font Droid Sans:Bold:size=9}#{repo}${font Droid Sans:italic:size=8} - updated #{ago}\n    by ${font Droid Sans:Bold:size=8}#{name}\n   ${font Droid Sans:italic:size=8}with message:${font Droid Sans:Bold:size=8}#{message}"
 		end
 	end	
 end
 
-puts ""
+puts "\n${font}foo"
 
 STDERR.puts "...success!"
