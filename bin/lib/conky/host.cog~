@@ -1,0 +1,7 @@
+#!/bin/bash
+# Host Module
+#call with execp
+
+cat <<-"COG"
+${font Droid Sans:Bold:size=8}${exec hostname| tr '[a-z]' '[A-Z]'} ${font Droid Sans:Italic:size=9}${voffset -2}is running      ${image $HOME/Pictures/ubuntu_logo.png -p 125,-1 -s 18x18} ${exec lsb_release -a 2>/dev/null|grep Description|sed 's/.*\t//'}${font}${voffset -6}
+COG

@@ -1,0 +1,24 @@
+#!/bin/bash
+# System Module
+#call with execp
+
+echo -n "trying System Module" >&2
+
+cat <<-"COG"
+${color Tan1}${font Droid Sans:Bold:size=8}SYSTEM${color}${font} ${hr 2}
+${voffset 2}${font OpenLogos:size=16}u${font}   Kernel:  $alignr${kernel}
+${font StyleBats:size=16}q${font}   Uptime: $alignr${uptime}
+${font StyleBats:size=16}g${font}   RAM: $memperc% $alignr${membar 12,60}
+${font StyleBats:size=16}j${font}   SWAP: $swapperc% $alignr${swapbar 12,60}
+${font StyleBats:size=16}A${font}   CPU average: ${alignr}0${execi 3 echo "scale=2;`uptime|awk '{print $9}'|sed 's/,//'`/4"|bc}
+${font StyleBats:size=16}k${font}   Processes: $alignr$processes (${execi 3 ruby -e "puts %x{ps U `echo $USER`|wc -l}.to_i-1"} are yours)
+
+Highest CPU $alignr PID CPU% MEM%
+${hr 1}
+${top name 1}$alignr${top pid 1}${top cpu 1}${top mem 1}
+${top name 2}$alignr${top pid 2}${top cpu 2}${top mem 2}
+${top name 3}$alignr${top pid 3}${top cpu 3}${top mem 3}
+
+COG
+
+echo "...success!" >&2

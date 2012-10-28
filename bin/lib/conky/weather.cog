@@ -1,0 +1,21 @@
+#!/bin/bash
+# Weather Module
+#call with execp
+
+echo -n "trying Weather Module" >&2
+
+cat <<-"COG"
+${color Tan1}${font Droid Sans:Bold:size=8}WEATHER${color}${font} ${hr 2}
+COG
+
+if (( `cat /proc/net/route|tail -n +2|awk '{print $1}'|head -1|wc -l` >= 1 )); then
+	cat <<-"COG"
+	${voffset 4}${rss http://www.rssweather.com/wx/us/md/colesville/rss.php 20 item_titles 1}
+COG
+else
+	cat <<-"COG"
+	${font PizzaDude Bullets:size=14}4${font Droid Sans:Bold:size=10} Weather Unavailable${font}
+COG
+fi
+
+echo "...success!" >&2

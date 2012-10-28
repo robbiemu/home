@@ -1,0 +1,62 @@
+use_xft yes
+xftfont DejaVu Sans:size=8
+xftalpha 0.8
+text_buffer_size 2048
+update_interval 5
+override_utf8_locale yes # Force UTF8? note that UTF8 support required XFT
+
+total_run_times 0 # Set to zero to run forever.
+own_window yes # Create own window instead of using desktop (required in nautilus)
+own_window_transparent yes
+own_window_type override
+#own_window_hints undecorated,below,sticky,skip_taskbar,running onskip_pager
+double_buffer yes
+
+# Minimum size of text area
+minimum_size 180 0
+maximum_width 333
+
+# Text alignment, other possible values are commented
+#alignment top_left
+alignment top_right
+#alignment bottom_left
+#alignment bottom_right
+
+draw_shades no #strong
+draw_outline no #stronger
+
+use_spacer none # Add spaces to keep things from moving about?  This only affects certain objects.
+uppercase no
+
+draw_borders no #outline border for whole display
+stippled_borders 0
+#border_margin 5
+border_width 1
+default_color white
+#default_shade_color black
+#default_outline_color white
+own_window_colour white
+
+# Gap between borders of screen and text
+# same thing as passing -x at command line
+gap_x 15
+gap_y 50
+
+no_buffers yes # Subtract file system buffers from used memory?
+cpu_avg_samples 3 # number of cpu samples to average, 1 to disable
+net_avg_samples 2 # number of net samples to average, 1 to disable
+
+TEXT
+# blank lines ('\n') are important!
+${execp $HOME/bin/lib/conky/host.cog}
+${execp $HOME/bin/lib/conky/media.cog}
+${execp $HOME/bin/lib/conky/github.cog}
+${execp $HOME/bin/lib/conky/system.cog}
+${execp $HOME/bin/lib/conky/mounts.cog}
+${execp $HOME/bin/lib/conky/network.cog}
+${execp $HOME/bin/lib/conky/weather.cog}
+
+##Footer
+${font Droid Sans:Bold:size=14}${execi 60 date +"%A"}
+${font Droid Sans::Bold:size=12}${execi 60 date +"%B %Y"}${font DejaVu Sans Mono:size=9}${execpi 60 DJS=`date +%_d`; cal -h | sed s/"\(^\|[^0-9]\)$DJS"'\b'/'\1${font DejaVu Sans Mono:Bold:size=9}${color orange}'"$DJS"'$color${font DejaVu Sans Mono:size=9}'/|sed 's/'`date +%B`'//'|sed 's/'`date +%Y`'//'}
+${font Georgia:Bold:Italic:size=14}${execi 14400 /bin/bash -c "$HOME/bin/conky/triple_path_quote.sh"|sed 's/,\s*/, /'|fmt -w 28}$font

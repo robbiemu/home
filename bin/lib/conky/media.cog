@@ -1,0 +1,27 @@
+#!/bin/bash
+# Media Module
+#call with execp
+
+echo -n "trying Media Module" >&2
+
+cat <<-"COG"
+${if_running amarok}
+	${color Tan1}${font Droid Sans:Bold:size=8}NOW PLAYING${color}${font} ${hr 2}
+	${voffset -4}${alignr -16}${font Droid Sans:italic:size=6}on Amarok${font}
+	${execi 1 $HOME/bin/conky/amarok.conky.sh artist} - ${execi 1 $HOME/bin/conky/amarok.sh title}
+${else}${if_running vlc}
+	${color Tan1}${font Droid Sans:Bold:size=8}NOW PLAYING${color}${font} ${hr 2}
+	${voffset -4}${alignr -16}${font Droid Sans:italic:size=6}on VLC${font}
+	${execi 1 xlsclients -l | grep "VLC media player" | cut -c -9 --complement|fmt -w 40|sed 's/- VLC media player//'}
+${else}${if_running last.fm}
+	${color Tan1}${font Droid Sans:Bold:size=8}RECENT TRACKS${color}${font} ${hr 2}
+	${voffset -4}${alignr -16}${font Droid Sans:italic:size=6}on LastFM${font}
+	${rss http://ws.audioscrobbler.com/1.0/user/robbiemuffin/recenttracks.rss 1 item_titles 6}
+${else}${if_running rhythmbox}
+	${color Tan1}${font Droid Sans:Bold:size=8}NOW PLAYING${color}${font} ${hr 2} 
+	${voffset -4}${alignr -16}${font Droid Sans:italic:size=6}on Rhythmbox${font}
+	${voffset -6}${execi 1 rhythmbox-client --print-playing|fmt -w 40}
+${endif}${endif}${endif}${endif}
+COG
+
+echo "...success!" >&2
