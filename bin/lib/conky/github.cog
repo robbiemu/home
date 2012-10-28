@@ -36,20 +36,23 @@ if not repos.empty?
 	
 	repos.each do |repo|
 		date=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits | grep date|head -1)
-		if Date.today == Date.parse(date)
+		
+		difference = DateTime.now.to_time - DateTime.parse(date).to_time
+		seconds    =  difference % 60
+		difference = (difference - seconds) / 60
+		minutes    =  difference % 60
+		difference = (difference - minutes) / 60
+		hours      =  difference % 24
+		difference = (difference - hours)   / 24
+		days       =  difference % 7		
+		ago = "#{seconds.to_i} seconds ago"
+		ago = "#{minutes.to_i} minutes ago" if minutes > 0
+		ago = "#{hours.to_i} hours ago" if hours > 0
+		
+		if days <= 0
 			message=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep message|head -1).split(/"/)[3]
 			name=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep name|head -1).split(/"/)[3]
 			#email=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/repos/#{gh_name}/#{repo}/commits |grep email|head -1).split(/"/)[3]
-						
-			difference = DateTime.now.to_time - DateTime.parse(date).to_time
-			seconds    =  difference % 60
-			difference = (difference - seconds) / 60
-			minutes    =  difference % 60
-			difference = (difference - minutes) / 60
-			hours      =  difference % 24
-			ago = "#{seconds.to_i} seconds ago"
-			ago = "#{minutes.to_i} minutes ago" if minutes > 0
-			ago = "#{hours.to_i} hours ago" if hours > 0
 			
 			puts "${font Droid Sans:Bold:size=9}#{repo}${font Droid Sans:italic:size=8} - updated #{ago}\n    by ${font Droid Sans:Bold:size=8}#{name}\n   ${font Droid Sans:italic:size=8}with message:${font Droid Sans:Bold:size=8}#{message}${font}"
 		end
