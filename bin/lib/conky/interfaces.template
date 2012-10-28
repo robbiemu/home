@@ -1,6 +1,6 @@
 ${voffset -6}${font PizzaDude Bullets:size=14}a${font}   Local Ip: $alignr${addr iface}
 ${voffset 4}${font PizzaDude Bullets:size=14}b${font}   Public Ip: $alignr${execi 15 wget http://checkip.dyndns.org/ -q -O - | grep -Eo '\<[[:digit:]]{1,3}(\.[[:digit:]]{1,3}){3}\>'}
-${voffset 4}${font PizzaDude Bullets:size=14}O${font}   Up: ${upspeed iface} kb/s $alignr${upspeedgraph iface 12,60 -l}
-${voffset 4}${font PizzaDude Bullets:size=14}U${font}   Down: ${downspeed iface} kb/s $alignr${downspeedgraph iface 12,60 -l}
+${voffset 4}${font PizzaDude Bullets:size=14}O${font}   Up: ${upspeed iface} $alignr${upspeedgraph iface 12,60 -l}
+${voffset 4}${font PizzaDude Bullets:size=14}U${font}   Down: ${downspeed iface} $alignr${downspeedgraph iface 12,60 -l}
 ${voffset 4}${font PizzaDude Bullets:size=14}N${font}   Uploaded: $alignr${totalup iface}
 ${voffset 4}${font PizzaDude Bullets:size=14}T${font}   Downloaded: $alignr${totaldown iface}
