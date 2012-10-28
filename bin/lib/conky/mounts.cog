@@ -1,14 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env ruby
+# -*- encoding : utf-8 -*-
+
 # Mounts Module
 #call with execp
 
-echo -n "trying Mounts Module" >&2
+STDERR.puts "trying Mounts Module" 
 
-cat <<-"COG"
-${color Tan1}${font Droid Sans:Bold:size=8}HD${color}${font} ${hr 2}
-${font Pie charts for maps:size=14}7${font Droid Sans:Bold:size=10}${voffset -5}  /  ${font Droid Sans:size=8}${fs_free /} / ${fs_size /}${font} $alignr${fs_bar 12,60 /}
-${voffset 4}${font Pie charts for maps:size=14}7${font Droid Sans:Bold:size=10}${voffset -5}  /var  ${font Droid Sans:size=8}${fs_free /var} / ${fs_size /var}${font} $alignr${fs_bar 12,60 /var}
+mounts=%x{mount|grep ^\/|awk '{print $3}'}.split /\n/
 
-COG
+if not mounts.empty?
+	puts "${color Tan1}${font Droid Sans:Bold:size=8}HD${color}${font} ${hr 2}"
+	mounts.each do |mp|
+		offset=((mounts.first == mp)?"":"${voffset 4}") 
+		puts <<-COG.gsub(/^\s+/, '')
+			#{offset}${font Pie charts for maps:size=14}7${font Droid Sans:Bold:size=10}${voffset -5}  #{mp}  ${font Droid Sans:size=8}${fs_free #{mp}} / ${fs_size #{mp}}${font} $alignr${fs_bar 12,60 #{mp}}
+		COG
+	end
+end
 
-echo "...success!" >&2
+puts ""
+
+STDERR.puts "...success!"

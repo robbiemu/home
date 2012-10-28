@@ -6,7 +6,7 @@ echo -n "trying Github Module" >&2
 
 cat <<-"COG"
 ${color Tan1}${font Droid Sans:Bold:size=8}GITHUB${color}${font} ${hr 2}
-${voffset 2}${execpi 1 $HOME/bin/conky/github.sh}
+${voffset 2}${execpi 15 $HOME/bin/conky/github.sh}
 
 COG
 
