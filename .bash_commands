@@ -161,6 +161,8 @@ EOF
 `" | column -t
 }
 
+echo "custom aliases and commands available for review with \"defs\" and \"def <command>\""
+
 function def()
 {
     ruby -e "`cat <<EOF
