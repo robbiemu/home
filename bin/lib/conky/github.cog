@@ -21,7 +21,7 @@ notifications=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/notific
 if notifications.nil?
 	puts "${voffset 8}${font Droid Sans:italic:size=8}no notifications$font"
 else
-	puts "${voffset 8}Notifications\n${hr 1}\n#{notifications.join /\n/}"
+	puts "${voffset 8}Notifications\n${hr 1}\n#{notifications}"
 end
 
 repos=%x(curl -s -u #{gh_name}:#{gh_pswd} https://api.github.com/users/#{gh_name}/repos|grep full_name).split(/\n/)
