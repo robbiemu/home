@@ -14,18 +14,26 @@ function brave-switch() {
   search_key_value="$(security find-generic-password -l "$search_key_label" -w 2>/dev/null)"
   inference_key_value="$(security find-generic-password -l "$inference_key_label" -w 2>/dev/null)"
 
-  if [[ -z "$search_key_value" || -z "$inference_key_value" ]]; then
-    echo "Error: Could not find one or both Brave API keys in the keychain."
-    echo "Please ensure entries exist for '$search_key_label' and '$inference_key_label'."
+  if [[ -z "$search_key_value" && -z "$inference_key_value" ]]; then
+    echo "Error: Could not find a Brave API key in the keychain."
+    echo "Please ensure an entry exists for '$search_key_label' or '$inference_key_label'."
     return 1
   fi
 
-  if [[ "$BRAVE_SEARCH_API_KEY" == "$inference_key_value" ]]; then
+  if [[ -n "$search_key_value" && -n "$inference_key_value" ]]; then
+    if [[ "$BRAVE_SEARCH_API_KEY" == "$inference_key_value" ]]; then
+      export BRAVE_SEARCH_API_KEY="$search_key_value"
+      echo "Switched to Brave standard SEARCH key."
+    else
+      export BRAVE_SEARCH_API_KEY="$inference_key_value"
+      echo "Switched to Brave INFERENCE key."
+    fi
+  elif [[ -n "$search_key_value" ]]; then
     export BRAVE_SEARCH_API_KEY="$search_key_value"
-    echo "Switched to Brave standard SEARCH key."
+    echo "Set Brave standard SEARCH key."
   else
     export BRAVE_SEARCH_API_KEY="$inference_key_value"
-    echo "Switched to Brave INFERENCE key."
+    echo "Set Brave INFERENCE key."
   fi
 
   echo "Active Key: ...${BRAVE_SEARCH_API_KEY: -4}"

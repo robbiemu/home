@@ -226,6 +226,83 @@ class BrewAdminTests(unittest.TestCase):
         self.assertIn("Set BREW_ADMIN_USER", result.stderr)
 
 
+class ZshTemplateTests(unittest.TestCase):
+    def run_brave_switch_with_fake_keychain(
+        self, search_key: str | None, inference_key: str | None
+    ) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "bin"
+            fake_bin.mkdir()
+            security = fake_bin / "security"
+            search_result = f"printf %s\\\\n {search_key!r}" if search_key else "exit 44"
+            inference_result = (
+                f"printf %s\\\\n {inference_key!r}" if inference_key else "exit 44"
+            )
+            security.write_text(
+                f"""#!/usr/bin/env bash
+label=""
+while (($#)); do
+  case "$1" in
+    -l)
+      shift
+      label="$1"
+      ;;
+  esac
+  shift || true
+done
+
+case "$label" in
+  "Brave Search api key")
+    {search_result}
+    ;;
+  "Brave Search Inference api key")
+    {inference_result}
+    ;;
+  *)
+    exit 45
+    ;;
+esac
+""",
+                encoding="utf-8",
+            )
+            security.chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+            }
+
+            return subprocess.run(
+                [
+                    "zsh",
+                    "-fc",
+                    (
+                        "source dotfiles/zshrc.d/brave.zsh; "
+                        "brave-switch; "
+                        "print -r -- ${BRAVE_SEARCH_API_KEY:-}"
+                    ),
+                ],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+    def test_brave_switch_uses_single_standard_key(self) -> None:
+        result = self.run_brave_switch_with_fake_keychain("search-only-key", None)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Set Brave standard SEARCH key.", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "search-only-key")
+
+    def test_brave_switch_uses_single_inference_key(self) -> None:
+        result = self.run_brave_switch_with_fake_keychain(None, "inference-only-key")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Set Brave INFERENCE key.", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "inference-only-key")
+
+
 class InstallerTests(unittest.TestCase):
     def test_user_dry_run_installs_home_bin_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
