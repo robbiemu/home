@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Default output from bin/pr_capture.py.
+pr-*-summary.md
