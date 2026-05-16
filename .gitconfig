@@ -1,0 +1,29 @@
+[safe]
+	directory = /Users/Shared/Public/Huggingface/agents_course_Final_Assignment
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[user]
+	name = robbiemu
+	email = roberto.tomas.cuentas@gmail.com
+[init]
+	defaultBranch = main
+[credential "https://github.com"]
+	# Empty helper resets inherited helpers; GitHub auth is delegated to gh.
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[credential]
+	# Non-GitHub hosts can still use the macOS Keychain helper.
+	helper = osxkeychain
+# Keep fsmonitor off globally; enable it per large repo with:
+#   git config --local core.fsmonitor true
+[core]
+	fsmonitor = false
+[gc]
+	auto = 0
+[credential "https://gist.github.com"]
+	# Gist uses the same gh-managed credential path as GitHub.
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
