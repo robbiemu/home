@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  zip_project [--output FILE] [--verbose] [--filter [REGEX]]
+              [--exclude REGEX] [--force] [--help]
+
+Create a zip archive from files tracked by Git plus untracked files that are not
+ignored by .gitignore.
+
+Options:
+  -o, --output FILE       Output zip path (default: project_bundle.zip)
+  -v, --verbose           Print progress
+  -f, --filter [REGEX]    Include only matching files. Without REGEX, use a
+                          default source/documentation extension filter.
+  -e, --exclude REGEX     Exclude matching files after filtering
+      --force             Overwrite existing output file
+  -h, --help              Show this help
+USAGE
+}
+
+log() {
+  if [[ "$verbose" == "1" ]]; then
+    echo "[zip_project] $*"
+  fi
+}
+
+output="project_bundle.zip"
+verbose=0
+filter=0
+filter_pattern=""
+exclude_pattern=""
+force=0
+default_filter='\.((c|cc|cpp|go|java|js|json|jsx|md|mjs|py|rb|rs|sh|toml|ts|tsx|ya?ml|ipynb))$'
+
+while (($#)); do
+  case "$1" in
+    -o|--output)
+      [[ $# -ge 2 ]] || { echo "--output requires a file" >&2; exit 1; }
+      output="$2"
+      shift 2
+      ;;
+    -v|--verbose)
+      verbose=1
+      shift
+      ;;
+    -f|--filter)
+      filter=1
+      shift
+      if (($#)) && [[ "$1" != -* ]]; then
+        filter_pattern="$1"
+        shift
+      fi
+      ;;
+    -e|--exclude)
+      [[ $# -ge 2 ]] || { echo "--exclude requires a regex" >&2; exit 1; }
+      exclude_pattern="$2"
+      shift 2
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "zip_project must be run inside a Git repository" >&2
+  exit 1
+}
+cd "$repo_root"
+
+output_dir="$(dirname "$output")"
+output_base="$(basename "$output")"
+case "$output_dir" in
+  /*) ;;
+  *) output_dir="$repo_root/$output_dir" ;;
+esac
+mkdir -p "$output_dir"
+output_dir="$(cd "$output_dir" && pwd -P)"
+output_path="$output_dir/$output_base"
+
+if [[ -e "$output_path" && "$force" != "1" ]]; then
+  echo "Output already exists: $output (use --force to overwrite)" >&2
+  exit 1
+fi
+
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/zip_project.XXXXXX")"
+cleanup() {
+  rm -rf "$tmpdir"
+}
+trap cleanup EXIT
+
+git ls-files --cached --others --exclude-standard > "$tmpdir/all_files.txt"
+
+repo_root_real="$(pwd -P)"
+case "$output_path" in
+  "$repo_root_real"/*)
+    output_rel="${output_path#"$repo_root_real"/}"
+    grep -F -x -v "$output_rel" "$tmpdir/all_files.txt" > "$tmpdir/all_files.no-output.txt" || true
+    mv "$tmpdir/all_files.no-output.txt" "$tmpdir/all_files.txt"
+    ;;
+esac
+
+if [[ "$filter" == "1" ]]; then
+  [[ -n "$filter_pattern" ]] || filter_pattern="$default_filter"
+  log "Filtering with: $filter_pattern"
+  grep -E "$filter_pattern" "$tmpdir/all_files.txt" > "$tmpdir/filelist.txt" || true
+else
+  cp "$tmpdir/all_files.txt" "$tmpdir/filelist.txt"
+fi
+
+if [[ -n "$exclude_pattern" ]]; then
+  log "Excluding with: $exclude_pattern"
+  grep -v -E "$exclude_pattern" "$tmpdir/filelist.txt" > "$tmpdir/filelist.filtered.txt" || true
+  mv "$tmpdir/filelist.filtered.txt" "$tmpdir/filelist.txt"
+fi
+
+if [[ ! -s "$tmpdir/filelist.txt" ]]; then
+  echo "No files matched" >&2
+  exit 1
+fi
+
+mkdir -p "$tmpdir/staging"
+while IFS= read -r file; do
+  [[ -f "$file" ]] || continue
+  mkdir -p "$tmpdir/staging/$(dirname "$file")"
+  cp -p "$file" "$tmpdir/staging/$file"
+done < "$tmpdir/filelist.txt"
+
+rm -f "$output_path"
+log "Creating $output_path"
+(cd "$tmpdir/staging" && zip -9rq "$output_path" .)
+
+echo "Created zip archive: $output_path"

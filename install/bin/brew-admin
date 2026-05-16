@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  brew-admin [brew args...]
+
+Run Homebrew as a configured macOS Homebrew-owning account.
+
+Environment:
+  BREW_ADMIN_USER   Required account name. Legacy BREW_ADMIN is also accepted.
+  BREW_ADMIN_HOME   Account home directory (default: /Users/$BREW_ADMIN_USER)
+  HOMEBREW_PREFIX   Homebrew prefix (default: /opt/homebrew)
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+brew_admin="${BREW_ADMIN_USER:-${BREW_ADMIN:-}}"
+if [[ -z "$brew_admin" ]]; then
+  echo "Set BREW_ADMIN_USER to the account that owns Homebrew." >&2
+  exit 1
+fi
+
+brew_admin_home="${BREW_ADMIN_HOME:-/Users/$brew_admin}"
+homebrew_prefix="${HOMEBREW_PREFIX:-/opt/homebrew}"
+brew_bin="$homebrew_prefix/bin/brew"
+
+if [[ ! -x "$brew_bin" ]]; then
+  echo "brew not found or not executable: $brew_bin" >&2
+  exit 1
+fi
+
+exec sudo -u "$brew_admin" HOME="$brew_admin_home" "$brew_bin" "$@"

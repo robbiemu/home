@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  git purge-old-branches [--older-than SPEC] [--protected a,b,c]
+                          [--remote [REMOTE]] [--delete] [--merged-base REF]
+                          [--help]
+
+List or delete branches whose last commit is older than SPEC.
+
+Defaults are conservative:
+  --older-than 6.weeks.ago
+  --protected main,master,dev,test,stage,staging
+  dry-run mode unless --delete is passed
+  local branches only unless --remote is passed
+
+Local deletion uses `git branch -d`, so unmerged branches are not removed.
+Remote deletion uses `git push REMOTE --delete BRANCH` and requires --delete.
+USAGE
+}
+
+die() {
+  echo "git-purge-old-branches: $*" >&2
+  exit 1
+}
+
+is_protected() {
+  local branch="$1"
+  local protected
+  for protected in "${protected_branches[@]}"; do
+    [[ "$branch" == "$protected" ]] && return 0
+  done
+  return 1
+}
+
+last_commit_epoch() {
+  git log -1 --format=%ct "$1" 2>/dev/null || echo 0
+}
+
+print_candidate() {
+  local ref="$1"
+  local branch="$2"
+  local epoch="$3"
+  local action="$4"
+  local relative
+  relative="$(git log -1 --format=%cr "$ref" 2>/dev/null || echo unknown)"
+  printf '%s %s (%s, %s)\n' "$action" "$branch" "$relative" "$epoch"
+}
+
+older_than="6.weeks.ago"
+protected_csv="main,master,dev,test,stage,staging"
+remote_mode=false
+remote_name="origin"
+delete=false
+merged_base=""
+
+while (($#)); do
+  case "$1" in
+    --older-than)
+      [[ $# -ge 2 ]] || die "--older-than requires a value"
+      older_than="$2"
+      shift 2
+      ;;
+    --protected|--protected-branches)
+      [[ $# -ge 2 ]] || die "--protected requires a comma-separated list"
+      protected_csv="$2"
+      shift 2
+      ;;
+    --remote|--origin)
+      remote_mode=true
+      shift
+      if (($#)) && [[ "$1" != -* ]]; then
+        remote_name="$1"
+        shift
+      fi
+      ;;
+    --delete)
+      delete=true
+      shift
+      ;;
+    --merged-base)
+      [[ $# -ge 2 ]] || die "--merged-base requires a ref"
+      merged_base="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown option: $1"
+      ;;
+  esac
+done
+
+git rev-parse --show-toplevel >/dev/null 2>&1 || die "run inside a Git repository"
+
+cutoff="$(git rev-parse --since="$older_than")" ||
+  die "could not parse --older-than value: $older_than"
+cutoff_epoch="${cutoff#--max-age=}"
+[[ "$cutoff_epoch" =~ ^[0-9]+$ ]] || die "unexpected cutoff from git: $cutoff"
+
+IFS=',' read -r -a protected_branches <<< "$protected_csv"
+if ! "$remote_mode"; then
+  current_branch="$(git branch --show-current || true)"
+fi
+
+if "$remote_mode"; then
+  git fetch --prune "$remote_name" >/dev/null 2>&1 || die "failed to fetch $remote_name"
+  while IFS= read -r ref; do
+    branch="${ref#refs/remotes/$remote_name/}"
+    [[ "$branch" == "HEAD" || "$branch" == */HEAD ]] && continue
+    is_protected "$branch" && continue
+    epoch="$(last_commit_epoch "$ref")"
+    [[ "$epoch" -gt 0 && "$epoch" -lt "$cutoff_epoch" ]] || continue
+
+    if "$delete"; then
+      print_candidate "$ref" "$remote_name/$branch" "$epoch" "delete"
+      git push "$remote_name" --delete "$branch"
+    else
+      print_candidate "$ref" "$remote_name/$branch" "$epoch" "would-delete"
+    fi
+  done < <(git for-each-ref --format='%(refname)' "refs/remotes/$remote_name")
+else
+  while IFS= read -r ref; do
+    branch="${ref#refs/heads/}"
+    [[ "$branch" == "$current_branch" ]] && continue
+    is_protected "$branch" && continue
+    if [[ -n "$merged_base" ]]; then
+      git merge-base --is-ancestor "$ref" "$merged_base" || continue
+    fi
+
+    epoch="$(last_commit_epoch "$ref")"
+    [[ "$epoch" -gt 0 && "$epoch" -lt "$cutoff_epoch" ]] || continue
+
+    if "$delete"; then
+      print_candidate "$ref" "$branch" "$epoch" "delete"
+      git branch -d "$branch"
+    else
+      print_candidate "$ref" "$branch" "$epoch" "would-delete"
+    fi
+  done < <(git for-each-ref --format='%(refname)' refs/heads)
+fi

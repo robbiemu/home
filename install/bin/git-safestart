@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  git safestart [--branch BRANCH] [--safe-branch BRANCH]
+                [--safe-branch-pattern PATTERN] [--submodule PATH]
+                [--allow-dirty] [--no-pull] [--no-run] [--dry-run]
+                [-- COMMAND...]
+
+Prepare a repository and its submodules before running the repo's main command.
+
+Configuration is read from local git config:
+  safestart.command             default shell command to run
+  safestart.safeBranch          fixed safe branch for configured submodules
+  safestart.safeBranchPattern   pattern using {branch}, {path}, or {name}
+  safestart.submodule           repeatable submodule path to branch-sync
+
+The default submodule behavior is pointer-safe:
+  git submodule sync --recursive
+  git submodule update --init --recursive
+
+Configured submodules are then optionally checked out to a safe branch and
+pulled with --ff-only.
+USAGE
+}
+
+die() {
+  echo "git-safestart: $*" >&2
+  exit 1
+}
+
+quote_command() {
+  printf '%q ' "$@"
+  printf '\n'
+}
+
+run() {
+  if "$dry_run"; then
+    printf '+ '
+    quote_command "$@"
+  else
+    "$@"
+fi
+}
+
+run_shell() {
+  local command="$1"
+  if "$dry_run"; then
+    printf '+ '
+    quote_command bash -lc "$command"
+  else
+    bash -lc "$command"
+  fi
+}
+
+git_config_get() {
+  git config --get "$1" 2>/dev/null || true
+}
+
+git_config_get_all() {
+  git config --get-all "$1" 2>/dev/null || true
+}
+
+require_clean_repo() {
+  local path="$1"
+  local label="$2"
+
+  "$allow_dirty" && return 0
+  "$dry_run" && return 0
+
+  if [[ -n "$(git -C "$path" status --porcelain)" ]]; then
+    die "$label has uncommitted changes; use --allow-dirty to continue"
+  fi
+}
+
+derive_safe_branch() {
+  local submodule_path="$1"
+  local submodule_name="${submodule_path##*/}"
+  local pattern="$safe_branch_pattern"
+  local result
+
+  if [[ -n "$safe_branch" ]]; then
+    printf '%s\n' "$safe_branch"
+    return 0
+  fi
+
+  [[ -n "$pattern" ]] || return 1
+  result="${pattern//\{branch\}/$effective_branch}"
+  result="${result//\{path\}/$submodule_path}"
+  result="${result//\{name\}/$submodule_name}"
+  printf '%s\n' "$result"
+}
+
+branch=""
+safe_branch=""
+safe_branch_pattern=""
+allow_dirty=false
+dry_run=false
+no_pull=false
+no_run=false
+submodules=()
+command_args=()
+
+while (($#)); do
+  case "$1" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --branch)
+      [[ $# -ge 2 ]] || die "--branch requires a value"
+      branch="$2"
+      shift 2
+      ;;
+    --safe-branch)
+      [[ $# -ge 2 ]] || die "--safe-branch requires a value"
+      safe_branch="$2"
+      shift 2
+      ;;
+    --safe-branch-pattern)
+      [[ $# -ge 2 ]] || die "--safe-branch-pattern requires a value"
+      safe_branch_pattern="$2"
+      shift 2
+      ;;
+    --submodule)
+      [[ $# -ge 2 ]] || die "--submodule requires a value"
+      submodules+=("$2")
+      shift 2
+      ;;
+    --allow-dirty)
+      allow_dirty=true
+      shift
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    --no-pull)
+      no_pull=true
+      shift
+      ;;
+    --no-run)
+      no_run=true
+      shift
+      ;;
+    --)
+      shift
+      command_args=("$@")
+      break
+      ;;
+    -*)
+      die "unknown option: $1"
+      ;;
+    *)
+      if [[ -z "$branch" ]]; then
+        branch="$1"
+        shift
+      else
+        die "unexpected positional argument: $1; put commands after --"
+      fi
+      ;;
+  esac
+done
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  die "run inside a git repository"
+cd "$repo_root"
+
+config_command="$(git_config_get safestart.command)"
+config_branch="$(git_config_get safestart.branch)"
+config_safe_branch="$(git_config_get safestart.safeBranch)"
+config_safe_branch_pattern="$(git_config_get safestart.safeBranchPattern)"
+config_submodules=()
+while IFS= read -r config_submodule; do
+  [[ -n "$config_submodule" ]] && config_submodules+=("$config_submodule")
+done < <(git_config_get_all safestart.submodule)
+
+branch="${branch:-$config_branch}"
+safe_branch="${safe_branch:-$config_safe_branch}"
+safe_branch_pattern="${safe_branch_pattern:-$config_safe_branch_pattern}"
+if ((${#submodules[@]} == 0)); then
+  if ((${#config_submodules[@]} > 0)); then
+    submodules=("${config_submodules[@]}")
+  fi
+fi
+
+current_branch="$(git branch --show-current)"
+effective_branch="${branch:-$current_branch}"
+[[ -n "$effective_branch" ]] || die "detached HEAD; provide --branch"
+
+require_clean_repo "$repo_root" "main repo"
+
+if [[ -n "$branch" ]]; then
+  run git checkout "$branch"
+fi
+
+if ! "$no_pull"; then
+  run git pull --ff-only
+fi
+
+run git submodule sync --recursive
+run git submodule update --init --recursive
+
+if ((${#submodules[@]} > 0)); then
+  for submodule in "${submodules[@]}"; do
+    [[ -n "$submodule" ]] || continue
+    submodule_branch="$(derive_safe_branch "$submodule")" ||
+      die "submodule '$submodule' requires --safe-branch or --safe-branch-pattern"
+
+    if ! "$dry_run"; then
+      git -C "$submodule" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+        die "configured submodule path is not a git worktree: $submodule"
+    fi
+
+    require_clean_repo "$submodule" "submodule $submodule"
+    run git -C "$submodule" fetch --prune
+    run git -C "$submodule" checkout "$submodule_branch"
+    run git -C "$submodule" pull --ff-only
+  done
+  fi
+
+run git submodule status --recursive
+
+if "$no_run"; then
+  exit 0
+fi
+
+if ((${#command_args[@]})); then
+  run "${command_args[@]}"
+elif [[ -n "$config_command" ]]; then
+  run_shell "$config_command"
+else
+  echo "git-safestart: no command configured or provided; preparation complete" >&2
+fi

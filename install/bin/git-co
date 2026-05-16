@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  git co BRANCH [--allow-dirty] [--no-pull] [--dry-run]
+
+Checkout a branch in the main repo, sync submodule pointers, and checkout the
+same branch in configured safestart submodules. This is a no-run companion to
+git safestart.
+USAGE
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || $# -lt 1 ]]; then
+  usage
+  [[ $# -lt 1 ]] && exit 1
+  exit 0
+fi
+
+branch="$1"
+shift
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "$script_dir/git-safestart" ]]; then
+  safestart="$script_dir/git-safestart"
+elif [[ -x "$script_dir/git-safestart.sh" ]]; then
+  safestart="$script_dir/git-safestart.sh"
+else
+  safestart="git-safestart"
+fi
+
+exec "$safestart" \
+  --branch "$branch" \
+  --safe-branch-pattern "{branch}" \
+  --no-run \
+  "$@"

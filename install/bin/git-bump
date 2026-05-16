@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  git bump [REF] [LABEL] [options]
+
+Trigger a GitHub Actions workflow_dispatch run without creating a no-op commit.
+
+Options:
+  -w, --workflow FILE_OR_NAME  Workflow file/name/id (default: bump.yml, or
+                              git config bump.workflow)
+  -r, --ref REF                Branch or tag for the workflow run
+  -R, --repo OWNER/REPO        Target repository for gh
+      --label LABEL            Pass LABEL as the configured label input
+      --label-input NAME       Input name for LABEL (default: label)
+  -f, --raw-field KEY=VALUE    Pass raw workflow input to gh
+  -F, --field KEY=VALUE        Pass typed/file workflow input to gh
+      --json FILE|-            Read workflow inputs as JSON from FILE or stdin
+      --dry-run                Print the gh command without running it
+  -h, --help                   Show this help
+
+Compatibility:
+  git bump main release-123
+
+The first positional argument is treated as --ref, and the second as --label.
+USAGE
+}
+
+die() {
+  echo "git-bump: $*" >&2
+  exit 1
+}
+
+config_get() {
+  git config --get "$1" 2>/dev/null || true
+}
+
+current_branch() {
+  git branch --show-current 2>/dev/null || true
+}
+
+print_command() {
+  local separator=""
+  local arg
+  for arg in "$@"; do
+    printf '%s%q' "$separator" "$arg"
+    separator=" "
+  done
+  printf '\n'
+}
+
+workflow="${GIT_BUMP_WORKFLOW:-}"
+ref="${GIT_BUMP_REF:-}"
+repo="${GIT_BUMP_REPO:-}"
+label=""
+label_input="${GIT_BUMP_LABEL_INPUT:-}"
+json_file=""
+dry_run=false
+raw_fields=()
+fields=()
+positionals=()
+
+while (($#)); do
+  case "$1" in
+    -w|--workflow)
+      [[ $# -ge 2 ]] || die "--workflow requires a value"
+      workflow="$2"
+      shift 2
+      ;;
+    -r|--ref)
+      [[ $# -ge 2 ]] || die "--ref requires a value"
+      ref="$2"
+      shift 2
+      ;;
+    -R|--repo)
+      [[ $# -ge 2 ]] || die "--repo requires a value"
+      repo="$2"
+      shift 2
+      ;;
+    --label)
+      [[ $# -ge 2 ]] || die "--label requires a value"
+      label="$2"
+      shift 2
+      ;;
+    --label-input)
+      [[ $# -ge 2 ]] || die "--label-input requires a value"
+      label_input="$2"
+      shift 2
+      ;;
+    -f|--raw-field)
+      [[ $# -ge 2 ]] || die "--raw-field requires KEY=VALUE"
+      raw_fields+=("$2")
+      shift 2
+      ;;
+    -F|--field)
+      [[ $# -ge 2 ]] || die "--field requires KEY=VALUE"
+      fields+=("$2")
+      shift 2
+      ;;
+    --json)
+      [[ $# -ge 2 ]] || die "--json requires FILE or -"
+      json_file="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      while (($#)); do
+        positionals+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      die "unknown option: $1"
+      ;;
+    *)
+      positionals+=("$1")
+      shift
+      ;;
+  esac
+done
+
+[[ ${#positionals[@]} -le 2 ]] || die "expected at most REF and LABEL"
+if [[ ${#positionals[@]} -ge 1 ]]; then
+  [[ -z "$ref" ]] || die "do not pass both positional REF and --ref"
+  ref="${positionals[0]}"
+fi
+if [[ ${#positionals[@]} -eq 2 ]]; then
+  [[ -z "$label" ]] || die "do not pass both positional LABEL and --label"
+  label="${positionals[1]}"
+fi
+
+workflow="${workflow:-$(config_get bump.workflow)}"
+ref="${ref:-$(config_get bump.ref)}"
+repo="${repo:-$(config_get bump.repo)}"
+label_input="${label_input:-$(config_get bump.labelInput)}"
+
+workflow="${workflow:-bump.yml}"
+ref="${ref:-$(current_branch)}"
+label_input="${label_input:-label}"
+
+if [[ -n "$json_file" ]]; then
+  [[ -z "$label" ]] || die "--json cannot be combined with LABEL"
+  [[ ${#raw_fields[@]} -eq 0 && ${#fields[@]} -eq 0 ]] ||
+    die "--json cannot be combined with --field or --raw-field"
+fi
+
+command=(gh workflow run "$workflow")
+[[ -n "$repo" ]] && command+=(-R "$repo")
+[[ -n "$ref" ]] && command+=(--ref "$ref")
+
+if [[ -n "$json_file" ]]; then
+  command+=(--json)
+else
+  [[ -n "$label" ]] && command+=(-f "$label_input=$label")
+  if ((${#raw_fields[@]})); then
+    for field in "${raw_fields[@]}"; do
+      command+=(-f "$field")
+    done
+  fi
+  if ((${#fields[@]})); then
+    for field in "${fields[@]}"; do
+      command+=(-F "$field")
+    done
+  fi
+fi
+
+if "$dry_run"; then
+  print_command "${command[@]}"
+  if [[ -n "$json_file" && "$json_file" != "-" ]]; then
+    printf '< %q\n' "$json_file"
+  fi
+  exit 0
+fi
+
+command -v gh >/dev/null 2>&1 || die "gh is required"
+
+if [[ -n "$json_file" ]]; then
+  if [[ "$json_file" == "-" ]]; then
+    "${command[@]}"
+  else
+    [[ -f "$json_file" ]] || die "JSON input file not found: $json_file"
+    "${command[@]}" < "$json_file"
+  fi
+else
+  "${command[@]}"
+fi

@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  obsidian-interlink-agent [--dry-run] [--help]
+
+Run one scheduled agent pass over an Obsidian vault to add Obsidian-format
+interlinks between Markdown notes.
+
+Environment:
+  AGENTIC_RUNTIME       Runtime command to check for, such as codex
+  AGENTIC_ONE_OFF_CMD   One-off agent command that reads the prompt on stdin
+  OBSIDIAN_VAULT_DIR    Obsidian vault directory
+  HOME_REPO_AGENTIC_ENV Optional env file to source first
+USAGE
+}
+
+dry_run=false
+while (($#)); do
+  case "$1" in
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+env_file="${HOME_REPO_AGENTIC_ENV:-$HOME/.config/home-repo/agentic.env}"
+if [[ -r "$env_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$env_file"
+fi
+
+runtime="${AGENTIC_RUNTIME:-}"
+one_off_cmd="${AGENTIC_ONE_OFF_CMD:-}"
+vault="${OBSIDIAN_VAULT_DIR:-}"
+
+skip() {
+  echo "obsidian-interlink-agent: skipping: $*" >&2
+  exit 0
+}
+
+[[ -n "$runtime" ]] || skip "AGENTIC_RUNTIME is not set"
+[[ -n "$one_off_cmd" ]] || skip "AGENTIC_ONE_OFF_CMD is not set"
+[[ -n "$vault" ]] || skip "OBSIDIAN_VAULT_DIR is not set"
+command -v "$runtime" >/dev/null 2>&1 || skip "runtime not found: $runtime"
+[[ -d "$vault" ]] || skip "vault directory does not exist: $vault"
+
+if ! find "$vault" -type f -name '*.md' -print -quit | grep -q .; then
+  skip "no Markdown notes found in $vault"
+fi
+
+if "$dry_run"; then
+  printf 'cd %q\n' "$vault"
+  printf 'printf %%s\\\\n <prompt> | bash -lc %q\n' "$one_off_cmd"
+  exit 0
+fi
+
+lock_root="${HOME}/.cache/home-repo"
+lock_dir="$lock_root/obsidian-interlink-agent.lock"
+mkdir -p "$lock_root"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  skip "another run is already active"
+fi
+trap 'rmdir "$lock_dir"' EXIT
+
+read -r -d '' prompt <<PROMPT || true
+You are running as a scheduled, recurring Obsidian maintenance agent.
+
+Vault directory:
+$vault
+
+This job may run repeatedly from cron, so make the smallest idempotent edits
+that improve note interlinking. Do not create or modify cron jobs. Do not edit
+non-Markdown files. Do not delete notes.
+
+Use Obsidian wikilink format to create interlinks between the .md notes. Be
+thorough, and do not only append a "Related Documents" section. Scan each
+document and add links from document content to related content where the link
+belongs naturally.
+
+If the same destination is referenceable multiple times within a document, link
+only the first such occurrence. Preserve existing links. Prefer links that help
+navigation between durable concepts, people, projects, and notes. Avoid adding
+duplicate links to the same destination in the same document.
+
+Before editing, inspect the vault structure and infer note titles from file
+names and headings. Work recursively across the vault, but avoid generated,
+archive, template, and attachment directories when they are clearly named that
+way.
+PROMPT
+
+cd "$vault"
+printf '%s\n' "$prompt" | bash -lc "$one_off_cmd"

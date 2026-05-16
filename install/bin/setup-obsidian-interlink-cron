@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  setup-obsidian-interlink-cron [options]
+
+Idempotently install a cron entry that runs obsidian-interlink-agent.
+If the configured agent runtime, runner, vault, or crontab command is missing,
+the script exits successfully after explaining what it skipped.
+
+Options:
+  --schedule CRON       Cron schedule (default: 17 */6 * * *)
+  --runner PATH         Runner path (default: command -v obsidian-interlink-agent,
+                        then ~/.local/bin/obsidian-interlink-agent)
+  --env-file PATH       Env file written for cron (default:
+                        ~/.config/home-repo/agentic.env)
+  --runtime COMMAND     AGENTIC_RUNTIME value
+  --one-off-cmd CMD     AGENTIC_ONE_OFF_CMD value
+  --vault DIR           OBSIDIAN_VAULT_DIR value
+  --log-file PATH       Cron log path (default:
+                        ~/.local/var/log/obsidian-interlink-agent.log)
+  --remove              Remove the managed cron entry
+  --prompt              Prompt for missing values; blank answers skip setup
+  --dry-run             Print planned changes without writing files or crontab
+  -h, --help            Show this help
+USAGE
+}
+
+dry_run=false
+remove=false
+prompt=false
+schedule="${OBSIDIAN_INTERLINK_CRON_SCHEDULE:-17 */6 * * *}"
+runner=""
+env_file="${HOME_REPO_AGENTIC_ENV:-$HOME/.config/home-repo/agentic.env}"
+runtime="${AGENTIC_RUNTIME:-codex}"
+one_off_cmd="${AGENTIC_ONE_OFF_CMD:-}"
+vault="${OBSIDIAN_VAULT_DIR:-$HOME/Documents/Obsidian}"
+log_file="${OBSIDIAN_INTERLINK_LOG:-$HOME/.local/var/log/obsidian-interlink-agent.log}"
+marker="# home-repo: obsidian-interlink-agent"
+
+while (($#)); do
+  case "$1" in
+    --schedule)
+      [[ $# -ge 2 ]] || { echo "--schedule requires a value" >&2; exit 1; }
+      schedule="$2"
+      shift 2
+      ;;
+    --runner)
+      [[ $# -ge 2 ]] || { echo "--runner requires a path" >&2; exit 1; }
+      runner="$2"
+      shift 2
+      ;;
+    --env-file)
+      [[ $# -ge 2 ]] || { echo "--env-file requires a path" >&2; exit 1; }
+      env_file="$2"
+      shift 2
+      ;;
+    --runtime)
+      [[ $# -ge 2 ]] || { echo "--runtime requires a command" >&2; exit 1; }
+      runtime="$2"
+      shift 2
+      ;;
+    --one-off-cmd)
+      [[ $# -ge 2 ]] || { echo "--one-off-cmd requires a command" >&2; exit 1; }
+      one_off_cmd="$2"
+      shift 2
+      ;;
+    --vault)
+      [[ $# -ge 2 ]] || { echo "--vault requires a directory" >&2; exit 1; }
+      vault="$2"
+      shift 2
+      ;;
+    --log-file)
+      [[ $# -ge 2 ]] || { echo "--log-file requires a path" >&2; exit 1; }
+      log_file="$2"
+      shift 2
+      ;;
+    --remove)
+      remove=true
+      shift
+      ;;
+    --prompt)
+      prompt=true
+      shift
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+print_command() {
+  local separator=""
+  local arg
+  for arg in "$@"; do
+    printf '%s%q' "$separator" "$arg"
+    separator=" "
+  done
+  printf '\n'
+}
+
+skip() {
+  echo "setup-obsidian-interlink-cron: skipping: $*" >&2
+  exit 0
+}
+
+read_optional() {
+  local prompt_text="$1"
+  local value
+  "$prompt" || return 1
+  printf '%s' "$prompt_text" >&2
+  IFS= read -r value || value=""
+  [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
+}
+
+write_env_file() {
+  local env_dir
+  env_dir="$(dirname "$env_file")"
+  if "$dry_run"; then
+    print_command mkdir -p "$env_dir"
+    print_command chmod 700 "$env_dir"
+    printf 'write %q with AGENTIC_RUNTIME, AGENTIC_ONE_OFF_CMD, OBSIDIAN_VAULT_DIR\n' "$env_file"
+    return
+  fi
+
+  mkdir -p "$env_dir"
+  chmod 700 "$env_dir"
+  {
+    printf 'export AGENTIC_RUNTIME=%q\n' "$runtime"
+    printf 'export AGENTIC_ONE_OFF_CMD=%q\n' "$one_off_cmd"
+    printf 'export OBSIDIAN_VAULT_DIR=%q\n' "$vault"
+  } > "$env_file"
+  chmod 600 "$env_file"
+}
+
+if [[ -z "$runner" ]]; then
+  runner="$(command -v obsidian-interlink-agent 2>/dev/null || true)"
+  [[ -n "$runner" ]] || runner="$HOME/.local/bin/obsidian-interlink-agent"
+fi
+
+if "$remove"; then
+  if "$dry_run"; then
+    printf 'remove cron lines containing: %s\n' "$marker"
+    exit 0
+  fi
+  command -v crontab >/dev/null 2>&1 || skip "crontab command not found"
+  current_cron="$(crontab -l 2>/dev/null || true)"
+  { printf '%s\n' "$current_cron" | grep -F -v "$marker" || true; } | crontab -
+  echo "Removed managed Obsidian interlink cron entry"
+  exit 0
+fi
+
+if [[ ! -x "$runner" ]]; then
+  if value="$(read_optional "Runner path for obsidian-interlink-agent, or blank to skip: ")"; then
+    runner="$value"
+  fi
+fi
+[[ -x "$runner" ]] || skip "runner not found or not executable: $runner"
+
+if [[ -z "$one_off_cmd" ]]; then
+  if value="$(read_optional "AGENTIC_ONE_OFF_CMD, or blank to skip cron setup: ")"; then
+    one_off_cmd="$value"
+  fi
+fi
+[[ -n "$one_off_cmd" ]] || skip "AGENTIC_ONE_OFF_CMD is not set"
+
+if ! command -v "$runtime" >/dev/null 2>&1; then
+  if value="$(read_optional "AGENTIC_RUNTIME '$runtime' was not found. Runtime command, or blank to skip: ")"; then
+    runtime="$value"
+  fi
+fi
+command -v "$runtime" >/dev/null 2>&1 || skip "runtime not found: $runtime"
+
+if [[ ! -d "$vault" ]]; then
+  if value="$(read_optional "OBSIDIAN_VAULT_DIR '$vault' does not exist. Vault directory, or blank to skip: ")"; then
+    vault="$value"
+  fi
+fi
+[[ -d "$vault" ]] || skip "vault directory does not exist: $vault"
+if ! "$dry_run"; then
+  command -v crontab >/dev/null 2>&1 || skip "crontab command not found"
+fi
+
+write_env_file
+
+log_dir="$(dirname "$log_file")"
+cron_line="$schedule HOME_REPO_AGENTIC_ENV=$(printf '%q' "$env_file") $(printf '%q' "$runner") >> $(printf '%q' "$log_file") 2>&1 $marker"
+
+if "$dry_run"; then
+  print_command mkdir -p "$log_dir"
+  printf 'install cron line:\n%s\n' "$cron_line"
+  exit 0
+fi
+
+mkdir -p "$log_dir"
+current_cron="$(crontab -l 2>/dev/null || true)"
+{
+  printf '%s\n' "$current_cron" | grep -F -v "$marker" || true
+  printf '%s\n' "$cron_line"
+} | crontab -
+
+echo "Installed managed Obsidian interlink cron entry"
