@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+export PYTHONDONTWRITEBYTECODE=1
+
+echo "== zsh syntax =="
+zsh -n .zshrc
+while IFS= read -r fragment; do
+  zsh -n "$fragment"
+done < <(find dotfiles/zshrc.d -type f -name '*.zsh' -print)
+
+tmp_zshrc="$(mktemp "${TMPDIR:-/tmp}/home-repo-verify-zshrc.XXXXXX")"
+{
+  cat .zshrc
+  while IFS= read -r fragment; do
+    printf '\n# --- verify template: %s ---\n' "$fragment"
+    cat "$fragment"
+  done < <(find dotfiles/zshrc.d -type f -name '*.zsh' -print | sort)
+} > "$tmp_zshrc"
+zsh -n "$tmp_zshrc"
+rm -f "$tmp_zshrc"
+
+echo "== shell syntax =="
+while IFS= read -r script; do
+  bash -n "$script"
+done < <(
+  find install/bin tools -type f -perm -111 -print |
+    while IFS= read -r file; do
+      first_line="$(sed -n '1p' "$file")"
+      [[ "$first_line" == "#!/bin/bash" || "$first_line" == "#!/usr/bin/env bash" ]] && printf '%s\n' "$file"
+    done
+)
+
+echo "== python syntax =="
+python3 - <<'PY'
+import ast
+from pathlib import Path
+
+paths = sorted(Path(".").glob("install/bin/*.py")) + sorted(Path(".").glob("tests/*.py"))
+for path in paths:
+    ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    print(path)
+PY
+
+echo "== tests =="
+python3 -m unittest discover -s tests
+
+echo "== high-confidence secret scan =="
+if rg -n --hidden --glob '!**/.git/**' --glob '!**/.fonts/**' --glob '!**/*.ttf' \
+  '(gho_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]+|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|hf_[A-Za-z0-9]{20,}|-----BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY-----)' \
+  .; then
+  echo "Secret-looking material found; review before committing." >&2
+  exit 1
+fi
+
+echo "ok"

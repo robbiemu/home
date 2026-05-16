@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  tools/configure-git-safestart [options]
+
+Configure git-safestart for one local repository. Missing required values are
+prompted for when --prompt is used; a blank answer skips that setup section.
+
+Options:
+  --repo DIR                  Repository to configure (default: REPO or .)
+  --default-command COMMAND   Command safestart should run
+  --safe-branch BRANCH        Fixed safe branch for configured submodules
+  --safe-branch-pattern PAT   Pattern using {branch}, {path}, or {name}
+  --submodule PATH            Submodule path to branch-sync; repeatable
+  --prompt                    Prompt for missing values
+  --dry-run                   Print git config commands without running them
+  -h, --help                  Show this help
+USAGE
+}
+
+repo="${REPO:-.}"
+default_command="${DEFAULT_COMMAND:-}"
+safe_branch="${SAFE_BRANCH:-}"
+safe_branch_pattern="${SAFE_BRANCH_PATTERN:-}"
+submodules=()
+prompt=false
+dry_run=false
+
+if [[ -n "${SUBMODULES:-}" ]]; then
+  # SUBMODULES intentionally uses shell-word splitting for Makefile ergonomics.
+  # shellcheck disable=SC2206
+  submodules=(${SUBMODULES})
+fi
+
+while (($#)); do
+  case "$1" in
+    --repo)
+      [[ $# -ge 2 ]] || { echo "--repo requires a directory" >&2; exit 1; }
+      repo="$2"
+      shift 2
+      ;;
+    --default-command)
+      [[ $# -ge 2 ]] || { echo "--default-command requires a command" >&2; exit 1; }
+      default_command="$2"
+      shift 2
+      ;;
+    --safe-branch)
+      [[ $# -ge 2 ]] || { echo "--safe-branch requires a branch" >&2; exit 1; }
+      safe_branch="$2"
+      shift 2
+      ;;
+    --safe-branch-pattern)
+      [[ $# -ge 2 ]] || { echo "--safe-branch-pattern requires a pattern" >&2; exit 1; }
+      safe_branch_pattern="$2"
+      shift 2
+      ;;
+    --submodule)
+      [[ $# -ge 2 ]] || { echo "--submodule requires a path" >&2; exit 1; }
+      submodules+=("$2")
+      shift 2
+      ;;
+    --prompt)
+      prompt=true
+      shift
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+print_command() {
+  local separator=""
+  local arg
+  for arg in "$@"; do
+    printf '%s%q' "$separator" "$arg"
+    separator=" "
+  done
+  printf '\n'
+}
+
+run() {
+  if "$dry_run"; then
+    print_command "$@"
+  else
+    "$@"
+  fi
+}
+
+run_optional() {
+  if "$dry_run"; then
+    print_command "$@"
+  else
+    "$@" 2>/dev/null || true
+  fi
+}
+
+skip() {
+  echo "configure-git-safestart: skipping: $*" >&2
+  exit 0
+}
+
+read_optional() {
+  local prompt_text="$1"
+  local value
+  "$prompt" || return 1
+  printf '%s' "$prompt_text" >&2
+  IFS= read -r value || value=""
+  [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
+}
+
+while ! git -C "$repo" rev-parse --show-toplevel >/dev/null 2>&1; do
+  if new_repo="$(read_optional "Git repo path for safestart setup, or blank to skip: ")"; then
+    repo="$new_repo"
+  else
+    skip "no git repository selected"
+  fi
+done
+
+repo_root="$(git -C "$repo" rev-parse --show-toplevel)"
+existing_command="$(git -C "$repo_root" config --get safestart.command 2>/dev/null || true)"
+existing_safe_branch="$(git -C "$repo_root" config --get safestart.safeBranch 2>/dev/null || true)"
+existing_safe_branch_pattern="$(git -C "$repo_root" config --get safestart.safeBranchPattern 2>/dev/null || true)"
+existing_submodules="$(git -C "$repo_root" config --get-all safestart.submodule 2>/dev/null || true)"
+
+if [[ -z "$default_command" && -z "$existing_command" ]]; then
+  if value="$(read_optional "Default command for git safestart, or blank to skip this repo: ")"; then
+    default_command="$value"
+  else
+    skip "no default command configured"
+  fi
+fi
+
+if "$prompt" && [[ -z "$safe_branch" && -z "$safe_branch_pattern" && -z "$existing_safe_branch" && -z "$existing_safe_branch_pattern" ]]; then
+  if value="$(read_optional "Fixed safe submodule branch, or blank for pattern/none: ")"; then
+    safe_branch="$value"
+  elif value="$(read_optional "Safe branch pattern like safe/{branch}, or blank to skip: ")"; then
+    safe_branch_pattern="$value"
+  fi
+fi
+
+if "$prompt" && ((${#submodules[@]} == 0)) && [[ -z "$existing_submodules" ]]; then
+  if value="$(read_optional "Submodule paths to branch-sync, space-separated, or blank for none: ")"; then
+    # shellcheck disable=SC2206
+    submodules=($value)
+  fi
+fi
+
+if [[ -n "$default_command" ]]; then
+  run git -C "$repo_root" config --local safestart.command "$default_command"
+fi
+if [[ -n "$safe_branch" ]]; then
+  run git -C "$repo_root" config --local safestart.safeBranch "$safe_branch"
+  run_optional git -C "$repo_root" config --local --unset safestart.safeBranchPattern
+elif [[ -n "$safe_branch_pattern" ]]; then
+  run git -C "$repo_root" config --local safestart.safeBranchPattern "$safe_branch_pattern"
+  run_optional git -C "$repo_root" config --local --unset safestart.safeBranch
+fi
+if ((${#submodules[@]} > 0)); then
+  run_optional git -C "$repo_root" config --local --unset-all safestart.submodule
+  for submodule in "${submodules[@]}"; do
+    run git -C "$repo_root" config --local --add safestart.submodule "$submodule"
+  done
+fi
+
+echo "Configured git safestart for $repo_root"

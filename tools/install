@@ -1,0 +1,712 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  tools/install [--user] [--local] [--dotfiles] [--all] [options]
+
+Install commands from install/bin without requiring this repo to be checked out
+directly in $HOME.
+
+Modes:
+  --user                 Install user tools to ~/.local/bin (default)
+  --local                Install shared tools to /usr/local using sudo
+  --dotfiles             Install maintained dotfiles to $HOME with backups
+  --all                  Install both user and shared command tools
+
+Options:
+  --only NAME            Install only one named tool; repeatable as comma list
+  --user-bin DIR         User command directory (default: ~/.local/bin)
+  --local-prefix DIR     Shared prefix (default: /usr/local)
+  --home DIR             Home directory for dotfile install (default: $HOME)
+  --zsh-section NAME     Include one optional zsh template; repeatable as comma list
+  --prompt               Prompt for missing dotfile path settings
+  --dry-run              Print commands without running them
+  -h, --help             Show this help
+USAGE
+}
+
+print_command() {
+  local separator=""
+  local arg
+  for arg in "$@"; do
+    printf '%s%q' "$separator" "$arg"
+    separator=" "
+  done
+  printf '\n'
+}
+
+run() {
+  if "$dry_run"; then
+    print_command "$@"
+  else
+    "$@"
+  fi
+}
+
+only_names=""
+install_user=false
+install_local=false
+install_dotfiles=false
+dry_run=false
+prompt=false
+user_bin="${HOME}/.local/bin"
+local_prefix="/usr/local"
+home_dir="$HOME"
+requested_zsh_sections=""
+
+while (($#)); do
+  case "$1" in
+    --user)
+      install_user=true
+      shift
+      ;;
+    --local)
+      install_local=true
+      shift
+      ;;
+    --dotfiles)
+      install_dotfiles=true
+      shift
+      ;;
+    --all)
+      install_user=true
+      install_local=true
+      shift
+      ;;
+    --only)
+      [[ $# -ge 2 ]] || { echo "--only requires a tool name" >&2; exit 1; }
+      if [[ -n "$only_names" ]]; then
+        only_names="$only_names,$2"
+      else
+        only_names="$2"
+      fi
+      shift 2
+      ;;
+    --user-bin)
+      [[ $# -ge 2 ]] || { echo "--user-bin requires a directory" >&2; exit 1; }
+      user_bin="$2"
+      shift 2
+      ;;
+    --local-prefix)
+      [[ $# -ge 2 ]] || { echo "--local-prefix requires a directory" >&2; exit 1; }
+      local_prefix="$2"
+      shift 2
+      ;;
+    --home)
+      [[ $# -ge 2 ]] || { echo "--home requires a directory" >&2; exit 1; }
+      home_dir="$2"
+      shift 2
+      ;;
+    --zsh-section)
+      [[ $# -ge 2 ]] || { echo "--zsh-section requires a section name" >&2; exit 1; }
+      if [[ -n "$requested_zsh_sections" ]]; then
+        requested_zsh_sections="$requested_zsh_sections,$2"
+      else
+        requested_zsh_sections="$2"
+      fi
+      shift 2
+      ;;
+    --prompt)
+      prompt=true
+      shift
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if ! "$install_user" && ! "$install_local" && ! "$install_dotfiles"; then
+  install_user=true
+fi
+
+matches_only() {
+  local name="$1"
+  [[ -z "$only_names" ]] && return 0
+  case ",$only_names," in
+    *",$name,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+zsh_config_names=()
+zsh_config_values=()
+zsh_templates=()
+chosen_setting=""
+
+add_zsh_config_line() {
+  local name="$1"
+  local value="$2"
+  local i
+
+  for ((i = 0; i < ${#zsh_config_names[@]}; i++)); do
+    if [[ "${zsh_config_names[$i]}" == "$name" ]]; then
+      zsh_config_values[$i]="$value"
+      return 0
+    fi
+  done
+
+  zsh_config_names+=("$name")
+  zsh_config_values+=("$value")
+}
+
+print_zsh_config_lines() {
+  local i
+  for ((i = 0; i < ${#zsh_config_names[@]}; i++)); do
+    printf 'export %s=%q\n' "${zsh_config_names[$i]}" "${zsh_config_values[$i]}"
+  done
+}
+
+add_zsh_template() {
+  local name="$1"
+  local i
+  [[ -f "dotfiles/zshrc.d/$name.zsh" ]] || {
+    echo "Unknown zsh section: $name" >&2
+    exit 1
+  }
+
+  for ((i = 0; i < ${#zsh_templates[@]}; i++)); do
+    [[ "${zsh_templates[$i]}" == "$name" ]] && return 0
+  done
+
+  zsh_templates+=("$name")
+}
+
+has_zsh_template() {
+  local name="$1"
+  local i
+  for ((i = 0; i < ${#zsh_templates[@]}; i++)); do
+    [[ "${zsh_templates[$i]}" == "$name" ]] && return 0
+  done
+  return 1
+}
+
+load_existing_zsh_config() {
+  local config_file="$home_dir/.config/home-repo/paths.zsh"
+  local line assignment name
+  [[ -r "$config_file" ]] || return 0
+
+  while IFS= read -r line; do
+    [[ "$line" == export\ * ]] || continue
+    assignment="${line#export }"
+    [[ "$assignment" == *=* ]] || continue
+    name="${assignment%%=*}"
+    case "$name" in
+      PUB|GH|HF|PICO_GCC_PATH|PICO_TOOLCHAIN_PATH|PICO_SDK_PATH|\
+      ZEPHYR_SDK_INSTALL_DIR|ZEPHYR_BASE|ZEPHYR_TOOLCHAIN_VARIANT|\
+      AGENTIC_RUNTIME|AGENTIC_ONE_OFF_CMD|OBSIDIAN_VAULT_DIR|\
+      DOCKER_COMPLETIONS_DIR|GO_BIN|RACKET_BIN|LIBPQ_PREFIX|\
+      PYTHON_USER_BIN|NVM_HOMEBREW_PREFIX|ZSH_TIPS_AGENT_DIR|\
+      HOME_REPO_ZSH_TEMPLATES)
+        if [[ -z "${!name:-}" ]]; then
+          eval "$line"
+        fi
+        ;;
+    esac
+  done < "$config_file"
+}
+
+load_selected_zsh_templates() {
+  local name
+  for name in ${HOME_REPO_ZSH_TEMPLATES:-}; do
+    [[ -n "$name" ]] && add_zsh_template "$name"
+  done
+
+  local IFS=,
+  for name in $requested_zsh_sections; do
+    [[ -n "$name" ]] && add_zsh_template "$name"
+  done
+}
+
+join_zsh_templates() {
+  local joined=""
+  local i template
+  for ((i = 0; i < ${#zsh_templates[@]}; i++)); do
+    template="${zsh_templates[$i]}"
+    if [[ -n "$joined" ]]; then
+      joined="$joined $template"
+    else
+      joined="$template"
+    fi
+  done
+  printf '%s' "$joined"
+}
+
+zsh_sections_restricted() {
+  [[ -n "$requested_zsh_sections" ]]
+}
+
+zsh_section_requested() {
+  local section="$1"
+  local name
+  local IFS=,
+  for name in $requested_zsh_sections; do
+    [[ "$name" == "$section" ]] && return 0
+  done
+  return 1
+}
+
+section_should_evaluate() {
+  local section="$1"
+  ! zsh_sections_restricted || zsh_section_requested "$section" || has_zsh_template "$section"
+}
+
+section_prompt_allowed() {
+  local section="$1"
+  ! zsh_sections_restricted || zsh_section_requested "$section"
+}
+
+choose_path_setting() {
+  local name="$1"
+  local label="$2"
+  local fallback="${3:-}"
+  local current="${!name:-}"
+  local value
+  chosen_setting=""
+
+  if [[ -n "$current" ]]; then
+    if [[ -d "$current" ]]; then
+      add_zsh_config_line "$name" "$current"
+      chosen_setting="$current"
+      return 0
+    fi
+    fallback="$current"
+  fi
+
+  "$prompt" || return 0
+  printf '%s path' "$label" >&2
+  [[ -n "$fallback" ]] && printf ' [%s]' "$fallback" >&2
+  printf ', or blank to skip: ' >&2
+  IFS= read -r value || value=""
+  [[ -n "$value" ]] || return 0
+  add_zsh_config_line "$name" "$value"
+  chosen_setting="$value"
+}
+
+choose_command_setting() {
+  local name="$1"
+  local label="$2"
+  local fallback="${3:-}"
+  local current="${!name:-}"
+  local value
+  chosen_setting=""
+
+  if [[ -n "$current" ]]; then
+    if command -v "$current" >/dev/null 2>&1; then
+      add_zsh_config_line "$name" "$current"
+      chosen_setting="$current"
+      return 0
+    fi
+    fallback="$current"
+  fi
+
+  if [[ -n "$fallback" ]] && command -v "$fallback" >/dev/null 2>&1; then
+    chosen_setting="$fallback"
+    return 0
+  fi
+
+  "$prompt" || return 0
+  printf '%s command' "$label" >&2
+  [[ -n "$fallback" ]] && printf ' [%s]' "$fallback" >&2
+  printf ', or blank to skip: ' >&2
+  IFS= read -r value || value=""
+  [[ -n "$value" ]] || return 0
+  add_zsh_config_line "$name" "$value"
+  chosen_setting="$value"
+}
+
+choose_value_setting() {
+  local name="$1"
+  local label="$2"
+  local current="${!name:-}"
+  local value
+  chosen_setting=""
+
+  if [[ -n "$current" ]]; then
+    add_zsh_config_line "$name" "$current"
+    chosen_setting="$current"
+    return 0
+  fi
+
+  "$prompt" || return 0
+  printf '%s, or blank to skip: ' "$label" >&2
+  IFS= read -r value || value=""
+  [[ -n "$value" ]] || return 0
+  add_zsh_config_line "$name" "$value"
+  chosen_setting="$value"
+}
+
+ask_yes_no() {
+  local question="$1"
+  local answer
+  "$prompt" || return 1
+  printf '%s [y/N]: ' "$question" >&2
+  IFS= read -r answer || answer=""
+  case "$answer" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+path_setting_exists() {
+  local name="$1"
+  local current="${!name:-}"
+  [[ -n "$current" && -d "$current" ]] && return 0
+  return 1
+}
+
+command_setting_exists() {
+  local name="$1"
+  local fallback="${2:-}"
+  local current="${!name:-}"
+  [[ -n "$current" ]] && command -v "$current" >/dev/null 2>&1 && return 0
+  [[ -n "$fallback" ]] && command -v "$fallback" >/dev/null 2>&1 && return 0
+  return 1
+}
+
+configure_command_template() {
+  local template="$1"
+  local command_name="$2"
+  local question="$3"
+  : "$command_name"
+
+  section_should_evaluate "$template" || return 0
+  if has_zsh_template "$template" ||
+    { section_prompt_allowed "$template" && ask_yes_no "$question"; }; then
+    add_zsh_template "$template"
+  fi
+}
+
+configure_path_template() {
+  local template="$1"
+  local name="$2"
+  local label="$3"
+  local fallback="$4"
+  local question="$5"
+  local was_selected=false
+  local accepted=false
+  local enabled=false
+
+  section_should_evaluate "$template" || return 0
+  has_zsh_template "$template" && was_selected=true
+  if "$was_selected" && ! section_prompt_allowed "$template"; then
+    add_zsh_template "$template"
+    return 0
+  fi
+  if "$was_selected" && [[ -z "${!name:-}" && -n "$fallback" && -d "$fallback" ]]; then
+    add_zsh_template "$template"
+    return 0
+  fi
+
+  if "$was_selected" || path_setting_exists "$name" "$fallback"; then
+    enabled=true
+  elif ask_yes_no "$question"; then
+    enabled=true
+    accepted=true
+  fi
+
+  "$enabled" || return 0
+  if "$accepted" && [[ -n "$fallback" && -d "$fallback" ]]; then
+    add_zsh_template "$template"
+    return 0
+  fi
+  choose_path_setting "$name" "$label" "$fallback"
+  if "$was_selected" || [[ -n "$chosen_setting" ]]; then
+    add_zsh_template "$template"
+  fi
+}
+
+configure_prompt_template() {
+  local template="$1"
+  local question="$2"
+
+  section_should_evaluate "$template" || return 0
+  if has_zsh_template "$template" ||
+    { section_prompt_allowed "$template" && ask_yes_no "$question"; }; then
+    add_zsh_template "$template"
+  fi
+}
+
+configure_optional_zsh_templates() {
+  configure_command_template brew-admin brew-admin "Configure Homebrew brew-admin alias"
+  configure_command_template ollama ollama "Configure Ollama shell helpers"
+  configure_prompt_template macos-keychain-secrets "Configure macOS Keychain API key helpers"
+  configure_prompt_template brave "Configure Brave Search key switcher"
+  configure_path_template docker DOCKER_COMPLETIONS_DIR "Docker completions directory" "$home_dir/.docker/completions" "Configure Docker completions"
+  configure_path_template postgres-libpq LIBPQ_PREFIX "Homebrew libpq prefix" "/opt/homebrew/opt/libpq" "Configure Homebrew libpq flags"
+  configure_path_template python-user-bin PYTHON_USER_BIN "Python user bin directory" "$home_dir/Library/Python/3.9/bin" "Configure Python user bin path"
+  configure_path_template nvm NVM_HOMEBREW_PREFIX "Homebrew nvm prefix" "/opt/homebrew/opt/nvm" "Configure nvm"
+  configure_path_template go GO_BIN "Go user bin directory" "$home_dir/go/bin" "Configure Go user bin path"
+  configure_path_template racket RACKET_BIN "Racket bin directory" "/Applications/Racket v8.16/bin" "Configure Racket path"
+  configure_path_template zsh-tips-agent ZSH_TIPS_AGENT_DIR "zsh-tips-agent directory" "$home_dir/.local/lib/zsh-tips-agent" "Configure zsh-tips-agent"
+}
+
+configure_zsh_path_settings() {
+  local pub="" gh="" hf="" pico_gcc="" pico_toolchain="" pico_sdk=""
+  local zephyr_sdk="" zephyr_base="" obsidian=""
+  local config_dir config_file
+  local has_gh=false has_hf=false has_pico_gcc=false has_pico_toolchain=false
+  local has_pico_sdk=false has_zephyr_sdk=false has_zephyr_base=false
+  local configure_workspace=false configure_pico=false configure_zephyr=false
+  local configure_agent=false
+  local workspace_selected=false pico_selected=false zephyr_selected=false
+  local agent_selected=false template_list=""
+  local saved_prompt
+  zsh_config_names=()
+  zsh_config_values=()
+  zsh_templates=()
+
+  load_existing_zsh_config
+  load_selected_zsh_templates
+
+  if section_should_evaluate shared-workspaces; then
+    saved_prompt="$prompt"
+    section_prompt_allowed shared-workspaces || prompt=false
+    choose_path_setting PUB "Shared public directory" "/Users/Shared/Public"
+    pub="$chosen_setting"
+    has_zsh_template shared-workspaces && workspace_selected=true
+
+    path_setting_exists GH "${pub:+$pub/github}" && has_gh=true
+    path_setting_exists HF "${pub:+$pub/huggingface}" && has_hf=true
+    if "$workspace_selected" || "$has_gh" || "$has_hf"; then
+      configure_workspace=true
+    elif ask_yes_no "Configure GitHub/Hugging Face workspace directories"; then
+      configure_workspace=true
+    fi
+    if "$configure_workspace"; then
+      choose_path_setting GH "GitHub workspace directory" "${pub:+$pub/github}"
+      gh="$chosen_setting"
+      choose_path_setting HF "Hugging Face workspace directory" "${pub:+$pub/huggingface}"
+      hf="$chosen_setting"
+    fi
+    if "$workspace_selected" || [[ -n "$pub" || -n "$gh" || -n "$hf" ]]; then
+      add_zsh_template shared-workspaces
+    fi
+    prompt="$saved_prompt"
+  fi
+
+  if section_should_evaluate pico; then
+    saved_prompt="$prompt"
+    section_prompt_allowed pico || prompt=false
+    has_zsh_template pico && pico_selected=true
+    path_setting_exists PICO_GCC_PATH "/Applications/ArmGNUToolchain/14.3.rel1/arm-none-eabi/bin" && has_pico_gcc=true
+    path_setting_exists PICO_TOOLCHAIN_PATH "/Applications/ArmGNUToolchain/14.3.rel1/arm-none-eabi/bin" && has_pico_toolchain=true
+    path_setting_exists PICO_SDK_PATH "${pub:+$pub/pico/pico-sdk}" && has_pico_sdk=true
+    if "$pico_selected" || { "$has_pico_gcc" && "$has_pico_toolchain" && "$has_pico_sdk"; }; then
+      configure_pico=true
+    elif "$prompt"; then
+      ask_yes_no "Configure Pi/Pico development paths" && configure_pico=true
+    elif "$has_pico_gcc" || "$has_pico_toolchain" || "$has_pico_sdk"; then
+      configure_pico=true
+    fi
+    if "$configure_pico"; then
+      choose_path_setting PICO_GCC_PATH "Pico GCC bin directory" "/Applications/ArmGNUToolchain/14.3.rel1/arm-none-eabi/bin"
+      pico_gcc="$chosen_setting"
+      choose_path_setting PICO_TOOLCHAIN_PATH "Pico toolchain bin directory" "${pico_gcc:-/Applications/ArmGNUToolchain/14.3.rel1/arm-none-eabi/bin}"
+      pico_toolchain="$chosen_setting"
+      choose_path_setting PICO_SDK_PATH "Pico SDK directory" "${pub:+$pub/pico/pico-sdk}"
+      pico_sdk="$chosen_setting"
+    fi
+    if "$pico_selected" || [[ -n "$pico_gcc" || -n "$pico_toolchain" || -n "$pico_sdk" ]]; then
+      add_zsh_template pico
+    fi
+    prompt="$saved_prompt"
+  fi
+
+  if section_should_evaluate zephyr; then
+    saved_prompt="$prompt"
+    section_prompt_allowed zephyr || prompt=false
+    has_zsh_template zephyr && zephyr_selected=true
+    path_setting_exists ZEPHYR_SDK_INSTALL_DIR "$home_dir/.local/zephyr-sdk-0.16.8" && has_zephyr_sdk=true
+    path_setting_exists ZEPHYR_BASE "$home_dir/zmk-work/app/zephyr" && has_zephyr_base=true
+    if "$zephyr_selected" || { "$has_zephyr_sdk" && "$has_zephyr_base"; }; then
+      configure_zephyr=true
+    elif "$prompt"; then
+      ask_yes_no "Configure Zephyr SDK paths" && configure_zephyr=true
+    elif "$has_zephyr_sdk" || "$has_zephyr_base" || [[ -n "${ZEPHYR_TOOLCHAIN_VARIANT:-}" ]]; then
+      configure_zephyr=true
+    fi
+    if "$configure_zephyr"; then
+      choose_path_setting ZEPHYR_SDK_INSTALL_DIR "Zephyr SDK directory" "$home_dir/.local/zephyr-sdk-0.16.8"
+      zephyr_sdk="$chosen_setting"
+      choose_path_setting ZEPHYR_BASE "Zephyr base directory" "$home_dir/zmk-work/app/zephyr"
+      zephyr_base="$chosen_setting"
+      if [[ -n "${ZEPHYR_TOOLCHAIN_VARIANT:-}" ]]; then
+        add_zsh_config_line ZEPHYR_TOOLCHAIN_VARIANT "$ZEPHYR_TOOLCHAIN_VARIANT"
+      elif [[ -n "$zephyr_sdk" || -n "$zephyr_base" ]]; then
+        add_zsh_config_line ZEPHYR_TOOLCHAIN_VARIANT "zephyr"
+      fi
+    fi
+    if "$zephyr_selected" || [[ -n "$zephyr_sdk" || -n "$zephyr_base" || -n "${ZEPHYR_TOOLCHAIN_VARIANT:-}" ]]; then
+      add_zsh_template zephyr
+    fi
+    prompt="$saved_prompt"
+  fi
+
+  if section_should_evaluate agentic-obsidian; then
+    saved_prompt="$prompt"
+    section_prompt_allowed agentic-obsidian || prompt=false
+    has_zsh_template agentic-obsidian && agent_selected=true
+    if [[ -n "${AGENTIC_ONE_OFF_CMD:-}" ]] ||
+      "$agent_selected" ||
+      path_setting_exists OBSIDIAN_VAULT_DIR "$home_dir/Documents/Obsidian" ||
+      ask_yes_no "Configure scheduled agent/Obsidian settings"; then
+      configure_agent=true
+    fi
+    if "$configure_agent"; then
+      choose_command_setting AGENTIC_RUNTIME "Agentic runtime" "codex"
+      choose_value_setting AGENTIC_ONE_OFF_CMD "Agentic one-off command"
+      choose_path_setting OBSIDIAN_VAULT_DIR "Obsidian vault directory" "$home_dir/Documents/Obsidian"
+      obsidian="$chosen_setting"
+    fi
+    if "$agent_selected" || [[ -n "${AGENTIC_RUNTIME:-}" || -n "${AGENTIC_ONE_OFF_CMD:-}" || -n "$obsidian" ]]; then
+      add_zsh_template agentic-obsidian
+    fi
+    prompt="$saved_prompt"
+  fi
+
+  configure_optional_zsh_templates
+
+  if ((${#zsh_templates[@]})); then
+    template_list="$(join_zsh_templates)"
+    add_zsh_config_line HOME_REPO_ZSH_TEMPLATES "$template_list"
+  fi
+
+  ((${#zsh_config_names[@]})) || return 0
+
+  config_dir="$home_dir/.config/home-repo"
+  config_file="$config_dir/paths.zsh"
+  if "$dry_run"; then
+    print_command mkdir -p "$config_dir"
+    print_command chmod 700 "$config_dir"
+    printf 'write %q with:\n' "$config_file"
+    print_zsh_config_lines
+    return 0
+  fi
+
+  mkdir -p "$config_dir"
+  chmod 700 "$config_dir"
+  print_zsh_config_lines > "$config_file"
+  chmod 600 "$config_file"
+}
+
+install_user_tools() {
+  local name source dest
+  run mkdir -p "$user_bin"
+  while IFS=':' read -r name source dest; do
+    matches_only "$name" || continue
+    run install -m 0755 "$source" "$user_bin/$dest"
+  done <<'TOOLS'
+sort_mypy:install/bin/sort_mypy.py:sort_mypy.py
+pr_capture:install/bin/pr_capture.py:pr_capture.py
+obsidian-interlink-agent:install/bin/obsidian-interlink-agent:obsidian-interlink-agent
+setup-obsidian-interlink-cron:install/bin/setup-obsidian-interlink-cron:setup-obsidian-interlink-cron
+TOOLS
+}
+
+install_local_tools() {
+  local local_lib="$local_prefix/lib"
+  local local_bin="$local_prefix/bin"
+  local name source lib_name command_names command
+
+  run sudo mkdir -p "$local_lib" "$local_bin"
+  while IFS=':' read -r name source lib_name command_names; do
+    matches_only "$name" || continue
+    run sudo install -m 0755 "$source" "$local_lib/$lib_name"
+    while IFS= read -r command; do
+      [[ -n "$command" ]] || continue
+      run sudo ln -sf "$local_lib/$lib_name" "$local_bin/$command"
+    done < <(printf '%s\n' "$command_names" | tr ',' '\n')
+  done <<'TOOLS'
+brew-admin:install/bin/brew-admin:brew-admin.sh:brew-admin
+git-safestart:install/bin/git-safestart:git-safestart.sh:git-safestart
+git-co:install/bin/git-co:git-co.sh:git-co
+git-bump:install/bin/git-bump:git-bump.sh:git-bump
+zip_project:install/bin/zip_project:zip_project.sh:zip_project
+git-purge-old-branches:install/bin/git-purge-old-branches:git-purge-old-branches.sh:git-purge-old-branches,git-pob
+TOOLS
+}
+
+generate_zshrc() {
+  local i template
+
+  cat .zshrc
+  for ((i = 0; i < ${#zsh_templates[@]}; i++)); do
+    template="${zsh_templates[$i]}"
+    printf '\n# --- home repo template: %s ---\n' "$template"
+    cat "dotfiles/zshrc.d/$template.zsh"
+    printf '\n# --- /home repo template: %s ---\n' "$template"
+  done
+}
+
+install_generated_zshrc() {
+  local backup_dir="$1"
+  local dest="$home_dir/.zshrc"
+  local tmp
+
+  matches_only ".zshrc" || return 0
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    run cp -p "$dest" "$backup_dir/.zshrc"
+  fi
+
+  if "$dry_run"; then
+    print_command generate-zshrc .zshrc "$dest"
+    if ((${#zsh_templates[@]})); then
+      printf 'inject zsh templates:\n'
+      printf '  %s\n' "${zsh_templates[@]}"
+    else
+      printf 'inject zsh templates: none\n'
+    fi
+    return 0
+  fi
+
+  tmp="$(mktemp "${TMPDIR:-/tmp}/home-repo-zshrc.XXXXXX")"
+  generate_zshrc > "$tmp"
+  install -m 0644 "$tmp" "$dest"
+  rm -f "$tmp"
+}
+
+install_dotfile_sources() {
+  local source dest backup_dir
+  backup_dir="${home_dir}/.local/share/home-repo-backups/$(date +%Y%m%d%H%M%S)-dotfiles"
+  configure_zsh_path_settings
+  run mkdir -p "$home_dir" "$backup_dir"
+  install_generated_zshrc "$backup_dir"
+  while IFS= read -r source; do
+    [[ -n "$source" ]] || continue
+    matches_only "$source" || continue
+    dest="$home_dir/$source"
+    if [[ -e "$dest" || -L "$dest" ]]; then
+      run cp -p "$dest" "$backup_dir/$source"
+    fi
+    run install -m 0644 "$source" "$dest"
+  done <<'DOTFILES'
+.gitconfig
+.vimrc
+DOTFILES
+}
+
+if "$install_user"; then
+  install_user_tools
+fi
+if "$install_local"; then
+  install_local_tools
+fi
+if "$install_dotfiles"; then
+  install_dotfile_sources
+fi
