@@ -1,4 +1,178 @@
-This is just the bash and vim rc files, and things that I like to take with me
-for my accounts in different computers. feel free to borrow what you like.
+# home
 
-Esto es só los archivos del bash y del vim, y las cosas q me gustaría llevar conmigo para todas mis cuentas en diferentes ordenadores. no dude en pedir prestado lo q guste.
+Mac-first dotfiles and small home-bin utilities.
+
+This repository started as a portable Linux/bash/vim home directory. The current
+tracked setup now captures the intended macOS/zsh home configuration while
+leaving older Linux desktop material in place for reference until it is
+deliberately retired.
+
+## Maintained Home Config
+
+- `.zshrc` is the small base zsh source: path dedupe, generic helpers,
+  history, and safe aliases/functions.
+- `dotfiles/zshrc.d/` contains optional zsh templates for machine-specific
+  sections such as workspaces, Pi/Pico, Zephyr, Ollama, nvm, Python, Docker,
+  Postgres, Racket, Go, Keychain secrets, Brave, and zsh-tips-agent.
+- `.gitconfig` is the maintained Git source for this machine.
+- `.vimrc` is the historical Vim baseline and still belongs in the install set.
+
+Install maintained dotfiles explicitly after review:
+
+```sh
+tools/install --dotfiles --prompt
+```
+
+Notable current choices:
+
+- zsh deduplicates `PATH` with `typeset -U path PATH`.
+- `~/.local/bin` is managed directly in `.zshrc`; the generated
+  `~/.local/bin/env` helper is not needed in this repo.
+- Machine-specific paths and selected zsh templates are loaded from
+  `~/.config/home-repo/paths.zsh`.
+- Optional zsh sections are not copied into the generated home `.zshrc` unless
+  they were already selected, explicitly requested, set through the environment,
+  or accepted during the installer prompt.
+- `ls` aliases are macOS-first (`ls -G`) with GNU/Linux fallbacks.
+- API secrets are loaded on demand from macOS Keychain with `setvar`; secret
+  values must never be committed. Linux equivalents are Secret Service
+  (`secret-tool`) for desktops or `pass` for headless systems.
+- GitHub credentials are delegated to `gh`; non-GitHub credentials can use the
+  macOS Keychain helper.
+- Scheduled agent jobs use `AGENTIC_RUNTIME`, `AGENTIC_ONE_OFF_CMD`, and
+  `OBSIDIAN_VAULT_DIR`. These are command/path settings, not secrets.
+- Git fsmonitor is off globally. Large repositories can opt in locally with:
+
+  ```sh
+  git config --local core.fsmonitor true
+  ```
+
+## Repository Layout
+
+- `install/bin/`: maintained command sources that this repo can install.
+- `dotfiles/zshrc.d/`: optional zsh fragments injected into the generated
+  `.zshrc` only when configured.
+- `tools/`: repo-maintenance commands. These are not installed as home-bin
+  commands.
+- `tests/`: unit tests for maintained commands and repo tooling.
+- `docs/`: usage notes for installable commands.
+- `bin/`: historical legacy material from the original repo. It is not the
+  source of truth for newly maintained commands.
+
+## Installer
+
+This repo no longer assumes it is checked out directly into `$HOME`.
+
+Run:
+
+```sh
+tools/install --dry-run
+```
+
+By default, the installer installs user-level commands to `~/.local/bin`.
+Privileged/shared commands are installed explicitly:
+
+```sh
+tools/install --user
+tools/install --local
+tools/install --all
+tools/install --dotfiles
+```
+
+`--local` installs to `/usr/local/lib` and `/usr/local/bin` through `sudo`.
+`--dotfiles` installs `.gitconfig` and `.vimrc` directly, and generates
+`$HOME/.zshrc` from the base `.zshrc` plus selected templates in
+`dotfiles/zshrc.d/`. Existing files are backed up first. With `--prompt`, it
+asks for optional sections and writes chosen paths plus
+`HOME_REPO_ZSH_TEMPLATES` to `~/.config/home-repo/paths.zsh`.
+
+The prompt flow is grouped so dependent settings can be skipped together. For
+example, if `PUB` is not configured, the installer asks once whether to
+configure `GH`/`HF`; Pi/Pico, Zephyr, and scheduled agent/Obsidian settings use
+the same blank-to-skip pattern.
+
+To add one optional zsh section later without reworking the whole file:
+
+```sh
+make list-zsh-sections
+make install-zsh-section ZSH_SECTION=nvm
+```
+
+Section names are the filenames under `dotfiles/zshrc.d/` without the `.zsh`
+suffix.
+
+Make targets are thin wrappers around the installer:
+
+```sh
+make install-user
+make install-local
+make install-all
+make install-dotfiles
+make list-zsh-sections
+make install-zsh-section ZSH_SECTION=nvm
+```
+
+## Installable Keepers
+
+The cleaned installable command sources are:
+
+- `install/bin/sort_mypy.py`: sorts mypy-style diagnostic blocks by path and
+  line.
+- `install/bin/pr_capture.py`: captures GitHub pull request context into
+  Markdown using the GitHub CLI.
+- `install/bin/git-safestart`: installable as `git safestart`; prepares a repo
+  and configured submodules before running the repo's default command.
+- `install/bin/git-co`: installable as `git co`; checkout companion that reuses
+  `git-safestart` without running the repo command.
+- `install/bin/git-bump`: installable as `git bump`; triggers GitHub Actions
+  workflow dispatches without no-op commits.
+- `install/bin/zip_project`: creates a zip archive from tracked Git files plus
+  unignored untracked files.
+- `install/bin/git-purge-old-branches`: installable as
+  `git purge-old-branches` and `git pob`; dry-runs or safely deletes old
+  branches.
+- `install/bin/brew-admin`: optional macOS role-account wrapper for Homebrew.
+- `install/bin/obsidian-interlink-agent`: one scheduled agent pass to add
+  Obsidian wikilinks between Markdown notes.
+- `install/bin/setup-obsidian-interlink-cron`: idempotently installs the cron
+  entry for the Obsidian interlink agent when the agent and vault exist.
+
+Setup-oriented Make targets prompt for missing required values when the repo
+does not already have a usable default. Blank answers skip that section for
+later instead of writing broken config.
+
+These are intentionally skipped:
+
+- `set-image-location`: writes GPS metadata to images using the current public
+  IP location.
+- `uv`, `uvx`, Python symlinks, `aider`, and `og`: installer-managed tools, not
+  repo-owned scripts.
+- `gh_find_stale_forks.sh`: destructive archive/delete helper that needs a
+  report-first rewrite before it belongs in shared dotfiles.
+
+## Legacy Material
+
+The original Conky/Ruby/bash files remain in the repo for now. They are not part
+of the active macOS home setup. In particular, `bin/lib/conky/github.cog` uses
+old GitHub password-era patterns and should not be carried forward without a
+rewrite.
+
+## Verification
+
+Run:
+
+```sh
+tools/verify
+```
+
+The verifier checks:
+
+- `.zshrc` syntax
+- optional zsh template syntax and an all-templates generated parse check
+- executable bash scripts in `install/bin/` and `tools/`
+- Python syntax for installable Python scripts and tests
+- unit tests
+- high-confidence token/private-key patterns
+
+This scan is intentionally conservative. It catches obvious secret values, but a
+human review is still required before committing changes to public dotfiles.
